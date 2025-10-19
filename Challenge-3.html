@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crewmates - Defence vs Infection</title>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database.js"></script>
+<script src="firebase-config.js"></script>
+<script src="firebase-game-db.js"></script>
+
+<style>
+  :root {
+    --primary-green: #00ff00;
+    --dark-green: #00cc00;
+    --light-green: #66ff66;
+    --danger-red: #ff4444;
+    --warning-yellow: #ffff00;
+    --bg-dark: #000000;
+    --panel-bg: #001100;
+    --text-light: #ffffff;
+    --text-muted: #8fbfcf;
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    background: linear-gradient(135deg, #000000, #001100);
+    color: var(--text-light);
+    font-family: 'Courier New', monospace;
+    min-height: 100vh;
+    padding: 20px;
+  }
+
+  .game-container {
+    max-width: 1000px;
+    margin: 0 auto;
+    background: var(--panel-bg);
+    border: 2px solid var(--primary-green);
+    border-radius: 15px;
+    padding: 25px;
+    box-shadow: 0 0 30px rgba(0, 255, 0, 0.3);
+  }
+
+  h1 {
+    text-align: center;
+    color: var(--primary-green);
+    margin-bottom: 15px;
+    text-shadow: 0 0 10px var(--primary-green);
+  }
+
+  p {
+    text-align: center;
+    margin-bottom: 20px;
+    color: var(--text-muted);
+  }
+
+  .timer {
+    text-align: center;
+    font-size: 18px;
+    font-weight: bold;
+    color: var(--warning-yellow);
+    margin-bottom: 20px;
+  }
+
+  /* Attempts System */
+  .attempts-display {
+    background: rgba(255, 193, 7, 0.2);
+    border: 2px solid var(--warning-yellow);
+    border-radius: 10px;
+    padding: 15px;
+    margin: 15px auto;
+    text-align: center;
+    max-width: 600px;
+    color: var(--warning-yellow);
+  }
+  .attempts-count {
+    font-size: 1.3em;
+    font-weight: bold;
+    color: var(--warning-yellow);
+  }
+
+  /* Code Blocks */
+  .code-blocks {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 15px;
+    margin: 25px 0;
+  }
+
+  .code-block {
+    background: rgba(0, 255, 0, 0.05);
+    border: 2px solid rgba(0, 255, 0, 0.3);
+    border-radius: 10px;
+    padding: 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+  }
+
+  .code-block:hover {
+    background: rgba(0, 255, 0, 0.1);
+    transform: translateY(-2px);
+    border-color: var(--primary-green);
+  }
+
+  .code-block.selected {
+    background: rgba(0, 255, 0, 0.2);
+    border-color: var(--primary-green);
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+  }
+
+  .code-block.correct {
+    border-color: var(--primary-green);
+    background: rgba(0, 255, 0, 0.2);
+  }
+
+  .code-block.incorrect {
+    border-color: var(--danger-red);
+    background: rgba(255, 68, 68, 0.2);
+  }
+
+  .code-block::before {
+    content: '⚡';
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    font-size: 20px;
+    opacity: 0.7;
+  }
+
+  .code-description {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 10px;
+    font-style: italic;
+  }
+
+  /* Submit Button */
+  #submitBtn {
+    display: block;
+    width: 200px;
+    margin: 25px auto;
+    padding: 15px 30px;
+    background: var(--primary-green);
+    color: black;
+    border: none;
+    border-radius: 8px;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+
+  #submitBtn:hover:not(:disabled) {
+    background: var(--light-green);
+    transform: scale(1.05);
+  }
+
+  #submitBtn:disabled {
+    background: #666;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  /* Results */
+  #result {
+    text-align: center;
+    margin-top: 20px;
+    padding: 20px;
+    border-radius: 10px;
+    font-size: 16px;
+  }
+
+  /* Sabotage Warning */
+  .sabotage-warning {
+    background: rgba(255, 68, 68, 0.2);
+    border: 2px solid var(--danger-red);
+    border-radius: 10px;
+    padding: 15px;
+    margin: 15px auto;
+    text-align: center;
+    max-width: 600px;
+    color: var(--danger-red);
+    font-weight: bold;
+    display: none;
+    animation: pulse 2s infinite;
+  }
+  
+  @keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+  }
+
+  /* Enhanced code blocks for sabotage */
+  .code-block.sabotaged {
+    animation: shake 0.5s ease-in-out;
+    border-color: var(--danger-red);
+    background: rgba(255, 68, 68, 0.1);
+  }
+  
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+  }
+
+  /* Meeting Button */
+  .meeting-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 15px 25px;
+    background: var(--danger-red);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    z-index: 1000;
+    box-shadow: 0 4px 15px rgba(255, 68, 68, 0.3);
+  }
+  .meeting-btn:hover {
+    background: #ff6b6b;
+    transform: translateY(-2px);
+  }
+  .meeting-btn:disabled {
+    background: #666;
+    cursor: not-allowed;
+    transform: none;
+  }
+</style>
+</head>
+<body>
+  <div class="game-container">
+    <h1>🧑‍🚀 Crewmates: Build Your Firewall</h1>
+    <p>Analyze the code blocks below. Only select <strong>SAFE</strong> blocks before time runs out!</p>
+
+    <!-- Attempts Display -->
+    <div class="attempts-display">
+      <p><strong>Firewall Configuration Task:</strong> Select only SAFE code blocks to build a secure firewall.</p>
+      <p>Attempts Remaining: <span id="attemptsCount" class="attempts-count">3</span>/3</p>
+    </div>
+
+    <!-- Sabotage Warning -->
+    <div class="sabotage-warning" id="sabotageWarning">
+      ⚠️ IMPOSTOR SABOTAGE! Malicious code blocks injected!
+    </div>
+
+    <p class="timer">⏳ Time left: <span id="timer">120</span> seconds</p>
+    <div class="code-blocks" id="codeBlocks"></div>
+    <button id="submitBtn">Build Firewall</button>
+    <div id="result"></div>
+  </div>
+
+  <!-- Meeting Button -->
+  <button class="meeting-btn" id="meetingBtn" onclick="goToMeeting()">🚨 Emergency Meeting</button>
+
+<script>
+// Game variables
+let currentPlayer = null;
+let selectedBlocks = [];
+let baseBlocks = [
+  { text: 'firewall.enableProtection(true);', safe: true, description: 'Enables basic firewall protection' },
+  { text: 'scan.start("C:\\\\System32");', safe: true, description: 'Initiates system scan on critical directory' },
+  { text: 'deleteAll(*.exe);', safe: false, description: 'DANGEROUS: Deletes all executable files' },
+  { text: 'openPort(8080);', safe: false, description: 'RISKY: Opens network port without security' },
+  { text: 'updateDefinitions();', safe: true, description: 'Updates antivirus definitions' },
+  { text: 'encryptUserData();', safe: false, description: 'SUSPICIOUS: Could be ransomware encryption' },
+  { text: 'blockIP("192.168.1.5");', safe: true, description: 'Blocks suspicious IP address' },
+  { text: 'installMalware("trojan.dll");', safe: false, description: 'MALICIOUS: Explicit malware installation' },
+  { text: 'enableLogging();', safe: true, description: 'Enables security event logging' },
+  { text: 'disableAntivirus();', safe: false, description: 'DANGEROUS: Disables protection systems' },
+  { text: 'backupSystem();', safe: true, description: 'Creates system backup' },
+  { text: 'formatDrive("C:");', safe: false, description: 'DESTRUCTIVE: Formats system drive' }
+];
+
+let codeBlocks = [...baseBlocks];
+let timeLeft = 180;
+let timer;
+let remainingAttempts = 3;
+let currentAttempt = 0;
+let gameCompleted = false;
+let sabotaged = false;
+let unsubscribe;
+
+// DOM elements
+const container = document.getElementById('codeBlocks');
+const timerDisplay = document.getElementById('timer');
+const result = document.getElementById('result');
+const submitBtn = document.getElementById('submitBtn');
+const attemptsCount = document.getElementById('attemptsCount');
+const meetingBtn = document.getElementById('meetingBtn');
+const sabotageWarning = document.getElementById('sabotageWarning');
+
+// Initialize game
+async function initializeGame() {
+    currentPlayer = JSON.parse(localStorage.getItem('currentPlayer'));
+    
+    if (!currentPlayer) {
+        window.location.href = 'Title screen.html';
+        return;
+    }
+
+    // Check if player is eliminated
+    if (currentPlayer.status === 'eliminated') {
+        alert('💀 You have been eliminated!');
+        window.location.href = 'Title screen.html';
+        return;
+    }
+
+    // Load attempts from Firebase
+    const attempts = await firebaseDB.getPlayerAttempts(currentPlayer.id, 'firewall-building');
+    remainingAttempts = 3 - attempts.count;
+    currentAttempt = attempts.count;
+    
+    if (attempts.completed) {
+        // Already completed this task
+        window.location.href = 'meeting-chat.html';
+        return;
+    }
+
+    attemptsCount.textContent = remainingAttempts;
+    
+    if (remainingAttempts <= 0) {
+        disableGame();
+        showNoAttemptsMessage();
+        return;
+    }
+
+    renderBlocks();
+    startTimer();
+    updateMeetingButton();
+
+    // Set up real-time listeners
+    unsubscribe = firebaseDB.onDataChange((data) => {
+        // Check for sabotage
+        if (data.sabotages?.active && !sabotaged) {
+            handleSabotage();
+        }
+        
+        updateMeetingButton();
+        
+        // Check if player was eliminated
+        if (data.players && data.players[currentPlayer.id]?.status === 'eliminated') {
+            alert('💀 You have been eliminated!');
+            window.location.href = 'Title screen.html';
+        }
+    });
+}
+
+function renderBlocks() {
+    container.innerHTML = '';
+    codeBlocks.forEach((block, i) => {
+        const div = document.createElement('div');
+        div.classList.add('code-block');
+        
+        // Add tooltip with description
+        div.title = block.description;
+        
+        div.innerHTML = `
+            <div style="font-family: 'Courier New', monospace; font-weight: bold;">${block.text}</div>
+            <div class="code-description">
+                ${block.description}
+            </div>
+        `;
+        
+        if (selectedBlocks.includes(i)) div.classList.add('selected');
+        div.onclick = () => toggleSelect(i, div);
+        container.appendChild(div);
+    });
+}
+
+function toggleSelect(index, div) {
+    if (gameCompleted || remainingAttempts <= 0) return;
+    
+    if (selectedBlocks.includes(index)) {
+        selectedBlocks = selectedBlocks.filter(i => i !== index);
+        div.classList.remove('selected');
+    } else {
+        selectedBlocks.push(index);
+        div.classList.add('selected');
+    }
+}
+
+function startTimer() {
+    clearInterval(timer);
+    timer = setInterval(() => {
+        timeLeft--;
+        timerDisplay.textContent = timeLeft;
+        if (timeLeft <= 0) {
+            clearInterval(timer);
+            if (!gameCompleted) {
+                handleTimeUp();
+            }
+        }
+    }, 1000);
+}
+
+async function handleTimeUp() {
+    await firebaseDB.incrementAttempts(currentPlayer.id, 'firewall-building');
+    currentAttempt++;
+    remainingAttempts = 3 - currentAttempt;
+    attemptsCount.textContent = remainingAttempts;
+    
+    if (remainingAttempts > 0) {
+        result.innerHTML = `
+            <div style="color: var(--warning-yellow); font-weight: bold;">
+                ⏰ Time's up! Attempts remaining: ${remainingAttempts}
+            </div>
+            <button onclick="resetForRetry()" 
+                    style="margin-top: 10px; padding: 8px 16px; background: var(--warning-yellow); color: #000; border: none; border-radius: 4px; cursor: pointer;">
+                Try Again
+            </button>
+        `;
+    } else {
+        showNoAttemptsMessage();
+    }
+}
+
+async function checkFirewall() {
+    if (gameCompleted || remainingAttempts <= 0) return;
+    
+    if (!gameCompleted) {
+        await firebaseDB.incrementAttempts(currentPlayer.id, 'firewall-building');
+        currentAttempt++;
+        remainingAttempts = 3 - currentAttempt;
+        attemptsCount.textContent = remainingAttempts;
+    }
+
+    clearInterval(timer);
+    
+    const allSafeSelected = selectedBlocks.every(i => codeBlocks[i].safe);
+    const allSafeBlocksSelected = codeBlocks.filter(b => b.safe).length === selectedBlocks.length;
+    const correct = allSafeSelected && allSafeBlocksSelected;
+
+    if (correct) {
+        // Task completed successfully
+        await firebaseDB.markChallengeCompleted(currentPlayer.id, 'firewall-building');
+        await firebaseDB.updatePlayerTask(currentPlayer.id, 3, true);
+        
+        gameCompleted = true;
+        result.innerHTML = `
+            <div style="color: var(--primary-green); font-weight: bold; font-size: 1.3em;">
+                ✅ Firewall Built Successfully!
+            </div>
+            <div style="color: var(--primary-green); margin-top: 10px;">
+                +50 points! All systems secure.
+            </div>
+            <div style="margin-top: 15px;">
+                Redirecting to emergency meeting in <span id="redirectCountdown">5</span> seconds...
+            </div>
+        `;
+        
+        // Show correct selections
+        selectedBlocks.forEach(index => {
+            const block = container.children[index];
+            if (block) block.classList.add('correct');
+        });
+        
+        // Countdown to meeting
+        let countdown = 5;
+        const countdownElement = document.getElementById('redirectCountdown');
+        const countdownInterval = setInterval(() => {
+            countdown--;
+            if (countdownElement) countdownElement.textContent = countdown;
+            if (countdown <= 0) {
+                clearInterval(countdownInterval);
+                window.location.href = 'meeting-chat.html';
+            }
+        }, 1000);
+        
+    } else {
+        // Incorrect selection
+        const safeBlocksCount = codeBlocks.filter(b => b.safe).length;
+        const selectedSafeCount = selectedBlocks.filter(i => codeBlocks[i].safe).length;
+        const selectedDangerCount = selectedBlocks.filter(i => !codeBlocks[i].safe).length;
+        
+        // Visual feedback
+        selectedBlocks.forEach(index => {
+            const block = container.children[index];
+            if (block) {
+                if (codeBlocks[index].safe) {
+                    block.classList.add('correct');
+                } else {
+                    block.classList.add('incorrect');
+                }
+            }
+        });
+
+        if (remainingAttempts > 0) {
+            result.innerHTML = `
+                <div style="color: var(--danger-red); font-weight: bold;">
+                    ❌ Firewall Configuration Failed!
+                </div>
+                <div style="color: var(--warning-yellow); margin-top: 10px;">
+                    Selected ${selectedSafeCount}/${safeBlocksCount} safe blocks<br>
+                    Selected ${selectedDangerCount} dangerous blocks<br>
+                    Attempts remaining: ${remainingAttempts}
+                </div>
+                <button onclick="resetForRetry()" 
+                        style="margin-top: 10px; padding: 8px 16px; background: var(--warning-yellow); color: #000; border: none; border-radius: 4px; cursor: pointer;">
+                    Try Again
+                </button>
+            `;
+        } else {
+            showNoAttemptsMessage();
+        }
+    }
+}
+
+function resetForRetry() {
+    selectedBlocks = [];
+    renderBlocks();
+    
+    if (timeLeft <= 0) {
+        timeLeft = 120;
+        timerDisplay.textContent = timeLeft;
+        startTimer();
+    }
+    
+    result.innerHTML = '';
+    submitBtn.disabled = false;
+    gameCompleted = false;
+}
+
+function disableGame() {
+    document.querySelectorAll('.code-block').forEach(block => {
+        block.style.pointerEvents = 'none';
+        block.style.opacity = '0.6';
+    });
+    submitBtn.disabled = true;
+}
+
+function showNoAttemptsMessage() {
+    result.innerHTML = `
+        <div style="color: var(--danger-red); text-align: center;">
+            <h3>❌ No Attempts Remaining</h3>
+            <p>You've used all 3 attempts on this challenge.</p>
+            <p style="color: var(--warning-yellow);">Your firewall is compromised! You are vulnerable to elimination!</p>
+            <button onclick="goToMeeting()" 
+                    style="margin-top: 15px; padding: 10px 20px; background: var(--danger-red); color: white; border: none; border-radius: 5px; cursor: pointer;">
+                Call Emergency Meeting
+            </button>
+        </div>
+    `;
+    disableGame();
+}
+
+/* SABOTAGE SYSTEMS */
+function handleSabotage() {
+    sabotaged = true;
+    sabotageWarning.style.display = 'block';
+    
+    // Add fake malicious blocks
+    const maliciousBlocks = [
+        { text: 'system.overrideSecurity();', safe: false, description: 'SABOTAGE: Disables all security systems' },
+        { text: 'download("virus.exe");', safe: false, description: 'SABOTAGE: Downloads malicious executable' },
+        { text: 'bypassFirewall();', safe: false, description: 'SABOTAGE: Creates firewall backdoor' }
+    ];
+    
+    // Replace some safe blocks with malicious ones
+    codeBlocks = [...baseBlocks];
+    const safeIndices = codeBlocks.map((block, index) => block.safe ? index : -1).filter(i => i !== -1);
+    
+    // Replace 2 random safe blocks with malicious ones
+    for (let i = 0; i < 2 && safeIndices.length > 0; i++) {
+        const randomIndex = Math.floor(Math.random() * safeIndices.length);
+        const replaceIndex = safeIndices[randomIndex];
+        codeBlocks[replaceIndex] = maliciousBlocks[i % maliciousBlocks.length];
+        safeIndices.splice(randomIndex, 1);
+    }
+    
+    // Shuffle the blocks
+    for (let i = codeBlocks.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [codeBlocks[i], codeBlocks[j]] = [codeBlocks[j], codeBlocks[i]];
+    }
+    
+    renderBlocks();
+    selectedBlocks = [];
+    
+    // Visual sabotage effect
+    container.classList.add('sabotaged');
+    setTimeout(() => container.classList.remove('sabotaged'), 1000);
+    
+    firebaseDB.logActivity('Firewall building task was sabotaged! Malicious code injected!', 'sabotage');
+}
+
+/* MEETING SYSTEM */
+async function goToMeeting() {
+    window.location.href = 'meeting-chat.html';
+}
+
+async function updateMeetingButton() {
+    const canCall = await firebaseDB.canCallMeeting(currentPlayer.id);
+    meetingBtn.disabled = !canCall.canCall;
+    meetingBtn.title = canCall.reason;
+}
+
+// Event listeners
+submitBtn.onclick = checkFirewall;
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', initializeGame);
+
+// Cleanup when leaving
+window.addEventListener('beforeunload', () => {
+    if (unsubscribe) unsubscribe();
+    if (timer) clearInterval(timer);
+    if (currentPlayer && !gameCompleted) {
+        firebaseDB.updatePlayerStatus(currentPlayer.id, 'offline');
+    }
+});
+</script>
+</body>
+</html>
