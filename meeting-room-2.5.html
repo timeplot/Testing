@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Emergency Meeting Room - Final Briefing</title>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database.js"></script>
+<script src="firebase-config.js"></script>
+<script src="firebase-game-db.js"></script>
+
+<style>
+  /* Same styles as previous meeting rooms */
+  :root{
+    --bg:#030612;
+    --panel:#07142a;
+    --accent:#00ff9f;
+    --accent-2:#00d0ff;
+    --glass: rgba(255,255,255,0.03);
+    --muted:#8fbfcf;
+    --meeting-red: #ff4444;
+    --crewmate-blue: #6bc4ff;
+  }
+  html,body{height:100%;margin:0;font-family:'monospace'; background: radial-gradient(1200px 600px at 10% 10%,black), var(--bg); color:var(--muted); -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;}
+
+  .stage{
+    min-height:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:28px;
+    box-sizing:border-box;
+    position:relative;
+    overflow:hidden;
+  }
+
+  .matrix {
+    pointer-events:none;
+    position:absolute;
+    inset:0;
+    font-size:12px;
+    color:aqua;
+    text-shadow: 0 0 8px aqua;
+    background: repeating-linear-gradient(to top, blue,black);
+    mix-blend-mode:overlay;
+    z-index:0;
+    animation: drift 14s linear infinite;
+  }
+  @keyframes drift { from{ transform:translateY(0) } to { transform:translateY(-30%) } }
+
+  .panel {
+    position:relative;
+    z-index:2;
+    width:500px;
+    background: linear-gradient(to top, #1a1a2e, #000000);
+    border-radius:18px;
+    padding:25px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.7), 0 0 40px rgba(255,68,68,0.1) inset;
+    border: 2px solid var(--meeting-red);
+    display:flex;
+    flex-direction:column;
+    gap:18px;
+    align-items:center;
+    box-sizing:border-box;
+  }
+
+  .name {
+    width:100%;
+    padding:12px 15px;
+    border-radius:10px;
+    background: linear-gradient(90deg, var(--meeting-red), #1a1a2e);
+    color:var(--accent);
+    font-weight:700;
+    letter-spacing:1px;
+    text-align:center;
+    font-size:22px;
+    text-shadow: 0 0 12px var(--meeting-red);
+    box-shadow: 0 6px 18px rgba(255,68,68,0.3);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+  }
+
+  .meeting-btn{
+    display:inline-flex;
+    align-items:center;
+    gap:12px;
+    padding:15px 25px;
+    border-radius:999px;
+    font-weight:800;
+    text-transform:uppercase;
+    letter-spacing:1px;
+    font-size:14px;
+    cursor:pointer;
+    border:2px solid var(--meeting-red);
+    background: linear-gradient(180deg, rgba(255,68,68,0.2), rgba(255,68,68,0.1));
+    color:var(--muted);
+    box-shadow: 0 8px 30px rgba(255,68,68,0.15), 0 0 26px rgba(255,68,68,0.1);
+    transition: transform .12s ease, box-shadow .12s ease, filter .12s ease;
+    text-decoration:none;
+  }
+
+  .led {
+    width:14px;height:14px;border-radius:50%;
+    background: linear-gradient(to top, var(--meeting-red), #ff6b6b);
+    box-shadow: 0 0 12px var(--meeting-red);
+    flex-shrink:0;
+  }
+
+  .line {
+    height:6px;
+    width:80%;
+    border-radius:6px;
+    background: linear-gradient(90deg, var(--meeting-red), #1a1a2e);
+    opacity:0.8;
+    margin:4px 0 8px;
+  }
+
+  .term {
+    width:100%;
+    background: rgba(0,0,0,0.3);
+    border-radius:10px;
+    padding:15px;
+    font-size:13px;
+    color:var(--muted);
+    box-shadow: inset 0 2px 8px rgba(0,0,0,0.6);
+    text-align:left;
+    border: 1px solid rgba(255,68,68,0.2);
+  }
+
+  .countdown {
+    margin-top: 15px;
+    font-weight: bold;
+    font-size: 18px;
+    color: var(--meeting-red);
+    text-align: center;
+  }
+
+  .meeting-info {
+    background: rgba(255,68,68,0.1);
+    border: 1px solid rgba(255,68,68,0.3);
+    border-radius: 8px;
+    padding: 12px;
+    margin-top: 10px;
+    text-align: center;
+    font-size: 12px;
+  }
+
+  .label{
+    position:relative;
+    display:inline-block;
+  }
+  .label::after{
+    content:"";
+    display:inline-block;
+    width:8px;
+    height:14px;
+    background:var(--meeting-red);
+    margin-left:8px;
+    vertical-align:middle;
+    box-shadow: 0 0 10px rgba(255,68,68,0.5) inset;
+    animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity:0 } }
+
+  .impostor-view {
+    display: none;
+    background: rgba(255,68,68,0.1);
+    border: 1px solid var(--meeting-red);
+    border-radius: 8px;
+    padding: 15px;
+    margin-top: 15px;
+    text-align: center;
+  }
+
+  .player-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: 11px;
+  }
+
+  .player-item {
+    padding: 5px;
+    border-radius: 4px;
+    background: rgba(0,0,0,0.3);
+  }
+
+  .player-item.crewmate { border-left: 3px solid var(--crewmate-blue); }
+  .player-item.impostor { border-left: 3px solid var(--meeting-red); }
+
+  @keyframes fall {
+    0% { top: -20px; opacity:1; }
+    100% { top: 100vh; opacity:0; }
+  }
+
+  .digit {
+    position: absolute;
+    top: -20px;
+    font-size: 16px;
+    text-shadow: 0 0 5px var(--meeting-red), 0 0 10px var(--meeting-red);
+    animation-name: fall;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+  }
+</style>
+</head>
+<body>
+  <div class="stage" role="main" aria-label="Emergency meeting room">
+    <div class="matrix" aria-hidden="true">
+      <pre style="margin:0;line-height:1.25;opacity:.6;">
+🚨 FINAL TASK BRIEFING
+CRITICAL SYSTEM CONFIGURATION
+FINAL PREPARATIONS...
+      </pre>
+    </div>
+
+    <div class="panel" role="region" aria-label="Emergency meeting control card">
+      <div class="name" id="crewName">🚨 FINAL BRIEFING</div>
+
+      <div class="line" aria-hidden="true"></div>
+
+      <div class="term" aria-hidden="true">
+        Status: <strong style="color:var(--meeting-red)">FINAL BRIEFING</strong> • Room: <code style="color:var(--accent-2)">#CREW-FINAL-01</code><br>
+        Participants: <span id="playerCount">1</span> online • Next Task: <span style="color:var(--accent)">Firewall Configuration</span>
+        <div class="meeting-info">
+          ⚠️ Final task preparation. System firewall configuration in <span id="briefingTimer">02:00</span>
+        </div>
+      </div>
+
+      <!-- Main Action Button -->
+      <a id="actionBtn" class="meeting-btn" role="button" aria-label="Meeting action">
+        <span class="led" aria-hidden="true"></span>
+        <span class="label" id="btnLabel">FINAL TASK AWAIT</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="opacity:.95">
+          <path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </a>
+
+      <!-- Countdown Timer -->
+      <div id="countdown" class="countdown" aria-live="polite">
+        Next task in: 02:00
+      </div>
+
+      <!-- Impostor Surveillance View -->
+      <div id="impostorView" class="impostor-view">
+        <h4>🕵️ FINAL SURVEILLANCE</h4>
+        <p>Monitoring crewmate final preparations...</p>
+        <div class="player-list" id="playerList">
+          <!-- Players will be listed here -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+// Game variables
+let currentPlayer = null;
+let countdownInterval;
+let timeLeft = 120; // 2 minutes
+let unsubscribe;
+
+// Initialize meeting room
+async function initializeMeetingRoom() {
+    currentPlayer = JSON.parse(localStorage.getItem('currentPlayer'));
+    
+    if (!currentPlayer) {
+        window.location.href = 'Title screen.html';
+        return;
+    }
+
+    // Update player status
+    await firebaseDB.updatePlayerStatus(currentPlayer.id, 'in-meeting');
+
+    // Set up UI based on role
+    if (currentPlayer.role === 'impostor') {
+        setupImpostorView();
+    } else {
+        setupCrewmateView();
+    }
+
+    startCountdown();
+    setupRealTimeUpdates();
+}
+
+function setupCrewmateView() {
+    document.getElementById('crewName').innerHTML = '🚨 FINAL BRIEFING';
+    document.getElementById('btnLabel').textContent = 'FINAL TASK AWAIT';
+    
+    const term = document.querySelector('.term');
+    term.innerHTML = `
+        Status: <strong style="color:var(--meeting-red)">FINAL BRIEFING</strong> • Room: <code style="color:var(--accent-2)">#CREW-FINAL-01</code><br>
+        Role: <span style="color:var(--crewmate-blue)">Crewmate</span> • Next: Firewall Configuration
+        <div class="meeting-info">
+            ⚠️ Final task preparation. System firewall configuration in <span id="briefingTimer">02:00</span>
+        </div>
+    `;
+}
+
+function setupImpostorView() {
+    document.getElementById('crewName').innerHTML = '🕵️ FINAL SURVEILLANCE';
+    document.getElementById('btnLabel').textContent = 'MONITOR FINAL TASK';
+    document.getElementById('impostorView').style.display = 'block';
+    
+    const term = document.querySelector('.term');
+    term.innerHTML = `
+        Status: <strong style="color:var(--meeting-red)">FINAL SURVEILLANCE</strong> • Room: <code style="color:var(--accent-2)">#IMP-FINAL-01</code><br>
+        Role: <span style="color:var(--meeting-red)">Impostor</span> • Crew preparing for final task
+        <div class="meeting-info">
+            👁️ Crewmates approaching final task. Last chance to eliminate in <span id="briefingTimer">02:00</span>
+        </div>
+    `;
+
+    // Impostor can leave anytime
+    document.getElementById('actionBtn').onclick = () => {
+        window.location.href = 'impostor-panel.html';
+    };
+}
+
+function startCountdown() {
+    updateCountdownDisplay();
+    
+    countdownInterval = setInterval(() => {
+        timeLeft--;
+        updateCountdownDisplay();
+        
+        if (timeLeft <= 0) {
+            clearInterval(countdownInterval);
+            redirectToNextTask();
+        }
+    }, 1000);
+}
+
+function updateCountdownDisplay() {
+    const minutes = Math.floor(timeLeft / 60);
+    const seconds = timeLeft % 60;
+    const timerText = `Next task in: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    
+    document.getElementById('countdown').textContent = timerText;
+    
+    const briefingTimer = document.getElementById('briefingTimer');
+    if (briefingTimer) {
+        briefingTimer.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+}
+
+function redirectToNextTask() {
+    if (currentPlayer.role === 'impostor') {
+        window.location.href = 'impostor-panel.html';
+    } else {
+        const completedTasks = currentPlayer.completedTasks.length;
+        
+        if (completedTasks >= 3) {
+            window.location.href = 'meeting-chat.html';
+        } else {
+            window.location.href = 'Challenge-3.html';
+        }
+    }
+}
+
+function setupRealTimeUpdates() {
+    unsubscribe = firebaseDB.onDataChange((data) => {
+        updatePlayerList(data.players || {});
+        updatePlayerCount(data.players || {});
+    });
+}
+
+function updatePlayerList(players) {
+    if (currentPlayer.role !== 'impostor') return;
+    
+    const playerList = document.getElementById('playerList');
+    const playersArray = Object.values(players).filter(p => p.status === 'in-meeting');
+    
+    playerList.innerHTML = playersArray.map(player => `
+        <div class="player-item ${player.role}">
+            ${player.username}
+            <br><small>${player.role === 'impostor' ? '🕵️' : '👨‍🚀'} ${player.role}</small>
+        </div>
+    `).join('');
+}
+
+function updatePlayerCount(players) {
+    const inMeeting = Object.values(players).filter(p => p.status === 'in-meeting').length;
+    document.getElementById('playerCount').textContent = inMeeting;
+}
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', initializeMeetingRoom);
+
+// Cleanup
+window.addEventListener('beforeunload', () => {
+    if (unsubscribe) unsubscribe();
+    if (countdownInterval) clearInterval(countdownInterval);
+    if (currentPlayer) {
+        firebaseDB.updatePlayerStatus(currentPlayer.id, 'online');
+    }
+});
+
+// Falling binary effect
+const digitCount = 150;
+const screenWidth = window.innerWidth;
+for (let i = 0; i < digitCount; i++) {
+    const span = document.createElement('span');
+    span.className = 'digit';
+    span.style.left = Math.random() * screenWidth + 'px';
+    span.style.animationDuration = (3 + Math.random() * 5) + 's';
+    span.style.animationDelay = Math.random() * 5 + 's';
+    span.textContent = Math.random() > 0.5 ? '0' : '1';
+    document.body.appendChild(span);
+}
+</script>
+</body>
+</html>

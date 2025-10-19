@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Phishing Mail - Drag & Sort</title>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database.js"></script>
+<script src="firebase-config.js"></script>
+<script src="firebase-game-db.js"></script>
+
+<style>
+  :root{
+    --bg:#000;
+    --neon:#00ff66;
+    --muted:#8fbfcf;
+    --danger:#ff5c6c;
+    --warning:#ffc107;
+    --crewmate-blue: #6bc4ff;
+  }
+  html,body{height:100%;margin:0;font-family:monospace;background:
+    radial-gradient(1200px 600px at 10% 10%, black), linear-gradient(to top, #001100, black);
+    color:var(--neon); -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;}
+  
+  /* Taskbar with attempts */
+  #taskbar { 
+    background: rgba(10,10,10,0.95); 
+    color: var(--neon); 
+    padding: 10px 14px; 
+    display:flex; 
+    gap:12px; 
+    align-items:center; 
+    border-bottom:1px solid rgba(0,255,150,0.06); 
+    position: fixed; 
+    top:0; 
+    left:0; 
+    width:100%; 
+    box-sizing:border-box; 
+    z-index:1000; 
+  }
+  #taskbar > div { display:flex; gap:8px; align-items:center; font-size:14px; }
+  #taskbar button { background:#07120a; color:var(--neon); border:1px solid rgba(0,255,150,0.12); border-radius:6px; padding:6px 10px; cursor:pointer; font-weight:700; }
+  
+  main { padding: 106px 20px 40px; max-width:1100px; margin:0 auto; }
+  h1{ text-align:center; color:var(--neon); margin:6px 0 8px; }
+  p{ text-align:center; color:var(--muted); margin:0 0 18px; }
+  .container{ display:flex; gap:20px; align-items:flex-start; justify-content:center; flex-wrap:wrap; }
+  .column{ background: rgba(5,10,5,0.8); padding:12px; border-radius:10px; flex:1 1 320px; min-height:380px; border:2px dashed rgba(0,255,150,0.06); box-sizing:border-box; }
+  .column h2{ text-align:center; margin:6px 0 10px; color:var(--neon); font-size:16px; }
+  #emails{ flex-basis:100%; margin-top:20px; display:flex; flex-wrap:wrap; gap:10px; justify-content:center; transition:all 300ms ease; }
+  .mail{ background: rgba(15,20,15,0.95); border-radius:8px; padding:10px; color:var(--neon); min-width:260px; max-width:360px; cursor:grab; box-shadow:0 6px 18px rgba(0,255,150,0.02); border-left:3px solid rgba(0,255,150,0.05); user-select:none; transition: transform 300ms ease, opacity 200ms ease; }
+  .mail.dragging{ opacity:0.6; transform:scale(1.02); }
+  #resultDisplay{ margin-top:16px; text-align:center; color:var(--neon); font-weight:700; font-size:16px; min-height:36px; }
+  .msg-error{ color:var(--danger); font-weight:700; margin-top:8px; }
+  .msg-success{ color:#7cffb2; font-weight:700; margin-top:8px; }
+  .msg-warning{ color:var(--warning); font-weight:700; margin-top:8px; }
+  
+  /* Attempts System */
+  .attempts-display {
+    background: rgba(255, 193, 7, 0.1);
+    border: 1px solid var(--warning);
+    border-radius: 8px;
+    padding: 10px;
+    margin: 10px 0;
+    text-align: center;
+  }
+  .attempts-count {
+    font-size: 1.1em;
+    font-weight: bold;
+    color: var(--warning);
+  }
+  
+  /* Meeting Button */
+  .meeting-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 12px 20px;
+    background: var(--danger);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    z-index: 1000;
+    box-shadow: 0 4px 15px rgba(255, 92, 108, 0.3);
+  }
+  .meeting-btn:hover {
+    background: #ff7a7a;
+    transform: translateY(-2px);
+  }
+  .meeting-btn:disabled {
+    background: #666;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  /* Sabotage Banner */
+  #sabotageBanner {
+    position: fixed;
+    top: 56px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1200;
+    background: linear-gradient(90deg, rgba(255,90,90,0.95), rgba(255,50,80,0.95));
+    color: white;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-weight: 800;
+    display: none;
+    box-shadow: 0 10px 30px rgba(255, 40, 60, 0.12);
+    animation: blink 1s linear infinite;
+  }
+  @keyframes blink { 0% {opacity:1} 50% {opacity:0.85} 100% {opacity:1} }
+
+  /* shuffle visual class */
+  .shuffling {
+    opacity: 0.6;
+    transform: scale(0.995);
+    transition: transform 300ms ease, opacity 300ms ease;
+  }
+
+  @media (max-width:820px){ .mail{ min-width:90%; max-width:calc(100% - 40px); } .container{ padding:0 10px; } }
+</style>
+</head>
+<body>
+  <!-- Taskbar with Attempts -->
+  <div id="taskbar" role="region" aria-label="Controls">
+    <div>Time Remaining: <span id="timer">05:00</span></div>
+    <div>Progress: <span id="progress">0%</span></div>
+    <div>Attempts: <span id="attemptsCount" class="attempts-count">3</span>/3</div>
+    <div style="margin-left:auto;display:flex;gap:8px;">
+      <button id="resetBtn" type="button">Reset</button>
+      <button id="submitBtn" type="button">Submit</button>
+    </div>
+  </div>
+
+  <!-- Sabotage Banner -->
+  <div id="sabotageBanner" role="status" aria-live="assertive">⚠️ IMPOSTOR SABOTAGE DETECTED — MAIL ORDER SHUFFLED</div>
+
+  <main>
+    <h1>Drag and Drop: Sort Phishing Emails</h1>
+    <p>Drag each email into the correct column: <strong>Real Email</strong> or <strong>Phishing Email</strong></p>
+
+    <!-- Attempts Display -->
+    <div class="attempts-display">
+      <strong>Training Task:</strong> Sort all 20 emails correctly. You have <strong>3 attempts</strong> to complete this task.
+      <br>Find the subtle clues that distinguish real emails from phishing attempts!
+    </div>
+
+    <div class="container" aria-live="polite">
+      <div class="column" id="real" aria-label="Real emails drop zone">
+        <h2>📧 Real Email</h2>
+        <div class="column-content" id="realContent"></div>
+      </div>
+      <div class="column" id="phishing" aria-label="Phishing emails drop zone">
+        <h2>🎣 Phishing Email</h2>
+        <div class="column-content" id="phishingContent"></div>
+      </div>
+      <div id="emails" aria-label="Unsorted emails area"></div>
+    </div>
+
+    <div id="resultDisplay" aria-live="polite"></div>
+  </main>
+
+  <!-- Meeting Button -->
+  <button class="meeting-btn" id="meetingBtn" onclick="goToMeeting()">🚨 Emergency Meeting</button>
+
+<script>
+/* CONFIG */
+const redirectUrl = "meeting-room-2.5.html";
+
+/* EMAIL DATA */
+const emails = [
+  {id:1, text: 'Subject: Invoice INV-2025-774 — Immediate payment required', type:'phishing', clue: 'Urgent payment demand with generic invoice number'},
+  {id:2, text: 'Subject: Action Required — Your account password expires today', type:'phishing', clue: 'Password expiry threat with urgent action'},
+  {id:3, text: 'Subject: CONGRATULATIONS — You\'ve been selected for $1,000 prize!', type:'phishing', clue: 'Too good to be true prize notification'},
+  {id:4, text: 'Subject: URGENT: New bank details for your upcoming payment to VendorCorp', type:'phishing', clue: 'Last-minute payment detail changes'},
+  {id:5, text: 'Subject: URGENT — Wire transfer request, confidential', type:'phishing', clue: 'Secretive wire transfer request'},
+  {id:6, text: 'Subject: A document has been shared with you — Project Plan v2', type:'phishing', clue: 'Generic document sharing with suspicious link'},
+  {id:7, text: 'Subject: Mandatory All-Staff Meeting — Please Accept', type:'phishing', clue: 'Mandatory meeting with accept button'},
+  {id:8, text: 'Subject: Important — Tax refund requires confirmation', type:'phishing', clue: 'Tax refund requiring personal info'},
+  {id:9, text: 'Subject: Security Alert — Verify your account now or it will be suspended', type:'phishing', clue: 'Account suspension threat'},
+  {id:10, text: 'Subject: Delivery attempt failed — redelivery fee required', type:'phishing', clue: 'Unexpected delivery fee'},
+  {id:11, text: 'Subject: Reminder — Invoice INV-3345 due 15 Oct 2025', type:'real', clue: 'Specific invoice with future due date'},
+  {id:12, text: 'Subject: Action required — Password expiry for alice.khan@gemsae.com', type:'real', clue: 'Specific user password expiry'},
+  {id:13, text: 'Subject: Regional Merit Scholarship — shortlist notification', type:'real', clue: 'Educational institution communication'},
+  {id:14, text: 'Subject: Invitation to panel: "Emerging Technologies in Education" — 10 Nov 2025', type:'real', clue: 'Professional event invitation'},
+  {id:15, text: 'Subject: Payment received — INV-7812, Ref: PAY-2025-0987', type:'real', clue: 'Payment confirmation with references'},
+  {id:16, text: 'Subject: FY2025 Compliance Declaration — please complete by 31 Oct 2025', type:'real', clue: 'Annual compliance with reasonable deadline'},
+  {id:17, text: 'Subject: Quotation for Signage — site visit follow-up & deposit details', type:'real', clue: 'Business quotation with specific details'},
+  {id:18, text: 'Subject: Matching campaign this weekend — support our scholarship fund', type:'real', clue: 'Charity fundraising campaign'},
+  {id:19, text: 'Subject: Shared drive "Curriculum" at 92% quota — recommended actions', type:'real', clue: 'IT system notification with solution'},
+  {id:20, text: 'Subject: Refunds for canceled session — timeline & support', type:'real', clue: 'Customer service communication'}
+];
+
+/* UI ELEMENTS */
+const emailsContainer = document.getElementById('emails');
+const timerEl = document.getElementById('timer');
+const progressEl = document.getElementById('progress');
+const resultEl = document.getElementById('resultDisplay');
+const resetBtn = document.getElementById('resetBtn');
+const submitBtn = document.getElementById('submitBtn');
+const sabotageBanner = document.getElementById('sabotageBanner');
+const attemptsCount = document.getElementById('attemptsCount');
+const meetingBtn = document.getElementById('meetingBtn');
+const realContent = document.getElementById('realContent');
+const phishingContent = document.getElementById('phishingContent');
+
+/* GAME STATE */
+let currentPlayer = null;
+let remainingAttempts = 3;
+let currentAttempt = 0;
+let gameCompleted = false;
+let timerInterval;
+let timeLeft = 300;
+let unsubscribe;
+
+// Initialize game
+async function initializeGame() {
+    currentPlayer = JSON.parse(localStorage.getItem('currentPlayer'));
+    
+    if (!currentPlayer) {
+        window.location.href = 'Title screen.html';
+        return;
+    }
+
+    // Check if player is eliminated
+    if (currentPlayer.status === 'eliminated') {
+        alert('💀 You have been eliminated!');
+        window.location.href = 'Title screen.html';
+        return;
+    }
+
+    // Load attempts from Firebase
+    const attempts = await firebaseDB.getPlayerAttempts(currentPlayer.id, 'phishing-detection');
+    remainingAttempts = 3 - attempts.count;
+    currentAttempt = attempts.count;
+    
+    if (attempts.completed) {
+        // Already completed this task
+        window.location.href = redirectUrl;
+        return;
+    }
+
+    attemptsCount.textContent = remainingAttempts;
+    
+    if (remainingAttempts <= 0) {
+        disableGame();
+        showNoAttemptsMessage();
+        return;
+    }
+
+    renderEmails();
+    updateProgress();
+    startTimer();
+    updateMeetingButton();
+
+    // Set up real-time listeners
+    unsubscribe = firebaseDB.onDataChange((data) => {
+        if (data.sabotages?.active && !data.sabotageHandled) {
+            handleSabotage();
+            firebaseDB.updateData({ sabotageHandled: true });
+        }
+        updateMeetingButton();
+        
+        // Check if player was eliminated
+        if (data.players && data.players[currentPlayer.id]?.status === 'eliminated') {
+            alert('💀 You have been eliminated!');
+            window.location.href = 'Title screen.html';
+        }
+    });
+}
+
+/* RENDER FUNCTIONS */
+function createMailElement(mail){
+    const div = document.createElement('div');
+    div.className = 'mail';
+    div.draggable = true;
+    div.id = 'mail-' + mail.id;
+    div.innerHTML = `
+        <div>${mail.text}</div>
+        <div style="font-size: 11px; color: var(--muted); margin-top: 5px; font-style: italic;">
+            💡 ${mail.clue}
+        </div>
+    `;
+    div.dataset.type = mail.type;
+    return div;
+}
+
+function renderEmails(order = null){
+    emailsContainer.innerHTML = '';
+    realContent.innerHTML = '';
+    phishingContent.innerHTML = '';
+    
+    let list = [...emails];
+    if(Array.isArray(order) && order.length === emails.length){
+        list = order.map(id => emails.find(m=>m.id===id));
+    } else {
+        list.sort(() => Math.random() - 0.5);
+    }
+    list.forEach(mail => emailsContainer.appendChild(createMailElement(mail)));
+}
+
+/* DRAG & DROP */
+let dragged = null;
+
+document.addEventListener('dragstart', e => {
+    if(e.target && e.target.classList.contains('mail')){
+        dragged = e.target;
+        e.target.classList.add('dragging');
+        e.dataTransfer?.setData('text/plain', e.target.id);
+    }
+});
+
+document.addEventListener('dragend', e => {
+    if(e.target && e.target.classList) e.target.classList.remove('dragging');
+    dragged = null;
+});
+
+document.querySelectorAll('.column').forEach(col => {
+    col.addEventListener('dragover', e => e.preventDefault());
+    col.addEventListener('drop', e => {
+        e.preventDefault();
+        if(dragged){ 
+            col.querySelector('.column-content').appendChild(dragged); 
+            updateProgress(); 
+        } else {
+            const id = (e.dataTransfer && e.dataTransfer.getData && e.dataTransfer.getData('text/plain')) || null;
+            if(id){ 
+                const el = document.getElementById(id); 
+                if(el) col.querySelector('.column-content').appendChild(el); 
+                updateProgress(); 
+            }
+        }
+    });
+});
+
+/* PROGRESS */
+function updateProgress(){
+    const sorted = document.querySelectorAll('#realContent .mail, #phishingContent .mail').length;
+    const progress = Math.floor((sorted / emails.length) * 100);
+    progressEl.textContent = progress + '%';
+    
+    // Enable submit button when all emails are sorted
+    submitBtn.disabled = sorted !== emails.length;
+}
+
+/* TIMER */
+function startTimer(){
+    clearInterval(timerInterval);
+    timeLeft = 180;
+    timerEl.textContent = formatMMSS(timeLeft);
+    
+    timerInterval = setInterval(() => {
+        timeLeft--;
+        timerEl.textContent = formatMMSS(Math.max(0, timeLeft));
+        if(timeLeft <= 0){
+            clearInterval(timerInterval);
+            if (!gameCompleted) {
+                resultEl.innerHTML = `<div class="msg-error">Time's up — you must correctly sort all emails to proceed.</div>`;
+                handleFailedAttempt();
+            }
+        }
+    }, 1000);
+}
+
+function formatMMSS(sec){
+    const m = Math.floor(sec/60).toString().padStart(2,'0');
+    const s = (sec%60).toString().padStart(2,'0');
+    return `${m}:${s}`;
+}
+
+/* ATTEMPTS SYSTEM */
+async function handleFailedAttempt() {
+    if (gameCompleted) return;
+    
+    await firebaseDB.incrementAttempts(currentPlayer.id, 'phishing-detection');
+    currentAttempt++;
+    remainingAttempts = 3 - currentAttempt;
+    attemptsCount.textContent = remainingAttempts;
+    
+    if (remainingAttempts > 0) {
+        resultEl.innerHTML = `
+            <div class="msg-warning">Time's up! Attempts remaining: ${remainingAttempts}</div>
+            <button onclick="resetForRetry()" 
+                    style="margin-top:10px; padding:8px 16px; background:var(--warning); color:#000; border:none; border-radius:4px; cursor:pointer;">
+                Try Again
+            </button>
+        `;
+    } else {
+        showNoAttemptsMessage();
+    }
+}
+
+function resetForRetry() {
+    renderEmails();
+    updateProgress();
+    startTimer();
+    resultEl.textContent = '';
+    submitBtn.disabled = true;
+    gameCompleted = false;
+}
+
+function disableGame() {
+    document.querySelectorAll('.mail').forEach(mail => {
+        mail.draggable = false;
+        mail.style.cursor = 'not-allowed';
+        mail.style.opacity = '0.6';
+    });
+    submitBtn.disabled = true;
+    resetBtn.disabled = true;
+}
+
+function showNoAttemptsMessage() {
+    resultEl.innerHTML = `
+        <div class="msg-error">
+            ❌ No Attempts Remaining<br>
+            You've used all 3 attempts on this challenge.
+        </div>
+        <div class="msg-warning">
+            You are now vulnerable to elimination by impostors!
+        </div>
+        <button onclick="goToMeeting()" 
+                style="margin-top:10px; padding:10px 20px; background:var(--danger); color:white; border:none; border-radius:5px; cursor:pointer;">
+            Call Emergency Meeting
+        </button>
+    `;
+    disableGame();
+}
+
+/* SUBMIT: only proceed when ALL correct */
+submitBtn.addEventListener('click', async () => {
+    if (gameCompleted || remainingAttempts <= 0) return;
+    
+    submitBtn.disabled = true;
+    clearInterval(timerInterval);
+
+    // Record attempt
+    await firebaseDB.incrementAttempts(currentPlayer.id, 'phishing-detection');
+    currentAttempt++;
+    remainingAttempts = 3 - currentAttempt;
+    attemptsCount.textContent = remainingAttempts;
+
+    let correct = 0;
+    emails.forEach(mail => {
+        const el = document.getElementById('mail-' + mail.id);
+        if(el && el.parentElement && el.parentElement.parentElement.id === mail.type) correct++;
+    });
+    
+    const incorrect = emails.length - correct;
+
+    if(correct === emails.length){
+        // Task completed successfully
+        await firebaseDB.markChallengeCompleted(currentPlayer.id, 'phishing-detection');
+        await firebaseDB.updatePlayerTask(currentPlayer.id, 2, true);
+        
+        gameCompleted = true;
+        resultEl.innerHTML = `
+            <div class="msg-success">🟢 Perfect! All ${correct} correct — proceeding...</div>
+            <div style="margin-top:8px; opacity:0.9;">+50 points! Redirecting in <span id="redirCountdown">3</span> seconds...</div>
+        `;
+        
+        let countdown = 3;
+        const rc = document.getElementById('redirCountdown');
+        const countdownInterval = setInterval(() => {
+            countdown--;
+            if(rc) rc.textContent = countdown;
+            if(countdown <= 0){
+                clearInterval(countdownInterval);
+                window.location.href = redirectUrl;
+            }
+        }, 1000);
+    } else {
+        if(remainingAttempts > 0) {
+            resultEl.innerHTML = `
+                <div>🟢 Correct: <strong>${correct}</strong></div>
+                <div>🔴 Incorrect: <strong>${incorrect}</strong></div>
+                <div class="msg-error">
+                    You need all ${emails.length} correct to proceed.<br>
+                    Attempts remaining: ${remainingAttempts}
+                </div>
+                <button onclick="resetForRetry()" 
+                        style="margin-top:10px; padding:8px 16px; background:var(--warning); color:#000; border:none; border-radius:4px; cursor:pointer;">
+                    Try Again
+                </button>
+            `;
+        } else {
+            resultEl.innerHTML = `
+                <div>🟢 Correct: <strong>${correct}</strong></div>
+                <div>🔴 Incorrect: <strong>${incorrect}</strong></div>
+                <div class="msg-error">
+                    No attempts remaining. You've become vulnerable to elimination!
+                </div>
+                <button onclick="goToMeeting()" 
+                        style="margin-top:10px; padding:10px 20px; background:var(--danger); color:white; border:none; border-radius:5px; cursor:pointer;">
+                    Call Emergency Meeting
+                </button>
+            `;
+            disableGame();
+        }
+    }
+});
+
+/* SABOTAGE SYSTEM */
+function handleSabotage() {
+    sabotageBanner.style.display = 'block';
+    setTimeout(() => sabotageBanner.style.display = 'none', 6000);
+
+    // Compute new random order
+    const ids = emails.map(e => e.id);
+    for (let i = ids.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [ids[i], ids[j]] = [ids[j], ids[i]];
+    }
+
+    // Visual shuffle animation
+    visualShuffleAnimation(ids);
+    firebaseDB.logActivity('Phishing email task was sabotaged by impostor!', 'sabotage');
+}
+
+function visualShuffleAnimation(newOrderIds) {
+    const container = emailsContainer;
+    container.classList.add('shuffling');
+    
+    Array.from(container.children).forEach((c,i) => {
+        c.style.transition = `transform 300ms ease ${i*12}ms, opacity 250ms ease ${i*12}ms`;
+        c.style.opacity = '0.4';
+        c.style.transform = 'translateY(6px)';
+    });
+    
+    setTimeout(() => {
+        const idToNode = {};
+        Array.from(container.children).forEach(node => { 
+            idToNode[node.id] = node; 
+        });
+        
+        newOrderIds.forEach(id => {
+            const node = idToNode['mail-' + id];
+            if(node) container.appendChild(node);
+        });
+        
+        Array.from(container.children).forEach((c,i) => {
+            c.style.opacity = '';
+            c.style.transform = '';
+            c.style.transition = '';
+        });
+        
+        container.classList.remove('shuffling');
+    }, 350);
+}
+
+/* MEETING SYSTEM */
+async function goToMeeting() {
+    window.location.href = 'meeting-chat.html';
+}
+
+async function updateMeetingButton() {
+    const canCall = await firebaseDB.canCallMeeting(currentPlayer.id);
+    meetingBtn.disabled = !canCall.canCall;
+    meetingBtn.title = canCall.reason;
+}
+
+/* RESET */
+resetBtn.addEventListener('click', () => {
+    if (remainingAttempts > 0 && !gameCompleted) {
+        renderEmails();
+        updateProgress();
+        startTimer();
+        resultEl.textContent = '';
+        submitBtn.disabled = true;
+    }
+});
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', initializeGame);
+
+// Cleanup when leaving
+window.addEventListener('beforeunload', () => {
+    if (unsubscribe) unsubscribe();
+    if (currentPlayer && !gameCompleted) {
+        firebaseDB.updatePlayerStatus(currentPlayer.id, 'offline');
+    }
+});
+</script>
+</body>
+</html>

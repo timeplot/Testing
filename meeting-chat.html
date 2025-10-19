@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Emergency Meeting - Discussion & Voting</title>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database.js"></script>
+<script src="firebase-config.js"></script>
+<script src="firebase-game-db.js"></script>
+
+<style>
+  :root {
+    --meeting-red: #ff4444;
+    --crewmate-blue: #6bc4ff;
+    --impostor-red: #ff6b6b;
+    --bg-dark: #000000;
+    --panel-bg: #001122;
+    --text-light: #ffffff;
+    --text-muted: #8fbfcf;
+    --success: #00ff00;
+    --warning: #ffff00;
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    background: linear-gradient(135deg, #000000, #1a0000);
+    color: var(--text-light);
+    font-family: 'Courier New', monospace;
+    min-height: 100vh;
+  }
+
+  .meeting-container {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    grid-template-rows: auto 1fr auto;
+    gap: 15px;
+    padding: 20px;
+    max-width: 1400px;
+    margin: 0 auto;
+    min-height: 100vh;
+  }
+
+  /* Header */
+  .header {
+    grid-column: 1 / -1;
+    background: var(--panel-bg);
+    border: 2px solid var(--meeting-red);
+    border-radius: 10px;
+    padding: 15px 20px;
+    text-align: center;
+  }
+
+  .header h1 {
+    color: var(--meeting-red);
+    margin-bottom: 10px;
+  }
+
+  .game-status {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    font-size: 14px;
+  }
+
+  .status-item {
+    background: rgba(255, 68, 68, 0.1);
+    padding: 8px 15px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 68, 68, 0.3);
+  }
+
+  /* Player List */
+  .player-list {
+    background: var(--panel-bg);
+    border: 2px solid var(--meeting-red);
+    border-radius: 10px;
+    padding: 20px;
+    grid-row: 2 / 4;
+  }
+
+  .player-list h2 {
+    color: var(--meeting-red);
+    margin-bottom: 15px;
+    text-align: center;
+  }
+
+  .player-item {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .player-item.eliminated {
+    opacity: 0.6;
+    background: rgba(255, 0, 0, 0.1);
+  }
+
+  .player-role {
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: bold;
+  }
+
+  .role-crewmate {
+    background: rgba(107, 196, 255, 0.2);
+    color: var(--crewmate-blue);
+  }
+
+  .role-impostor {
+    background: rgba(255, 107, 107, 0.2);
+    color: var(--impostor-red);
+  }
+
+  /* Chat Area */
+  .chat-area {
+    background: var(--panel-bg);
+    border: 2px solid var(--meeting-red);
+    border-radius: 10px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    margin-bottom: 15px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    min-height: 400px;
+  }
+
+  .message {
+    margin-bottom: 10px;
+    padding: 10px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .message.system {
+    background: rgba(255, 68, 68, 0.1);
+    border-left: 4px solid var(--meeting-red);
+  }
+
+  .message.crewmate {
+    border-left: 4px solid var(--crewmate-blue);
+  }
+
+  .message.impostor {
+    border-left: 4px solid var(--impostor-red);
+  }
+
+  .message-header {
+    display: flex;
+    justify-content: between;
+    margin-bottom: 5px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .message-sender {
+    font-weight: bold;
+  }
+
+  .message-time {
+    margin-left: auto;
+  }
+
+  .chat-input {
+    display: flex;
+    gap: 10px;
+  }
+
+  .chat-input input {
+    flex: 1;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid var(--meeting-red);
+    border-radius: 6px;
+    color: var(--text-light);
+    font-family: 'Courier New', monospace;
+  }
+
+  .chat-input button {
+    padding: 12px 20px;
+    background: var(--meeting-red);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+  }
+
+  /* Voting Area */
+  .voting-area {
+    background: var(--panel-bg);
+    border: 2px solid var(--meeting-red);
+    border-radius: 10px;
+    padding: 20px;
+  }
+
+  .voting-area h2 {
+    color: var(--meeting-red);
+    margin-bottom: 15px;
+    text-align: center;
+  }
+
+  .vote-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin-bottom: 15px;
+  }
+
+  .vote-option {
+    background: rgba(255, 68, 68, 0.1);
+    border: 1px solid var(--meeting-red);
+    border-radius: 8px;
+    padding: 15px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+
+  .vote-option:hover {
+    background: rgba(255, 68, 68, 0.2);
+    transform: scale(1.05);
+  }
+
+  .vote-option.voted {
+    background: rgba(255, 68, 68, 0.3);
+    border-color: var(--success);
+  }
+
+  .skip-vote {
+    width: 100%;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--text-muted);
+    border-radius: 6px;
+    color: var(--text-light);
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+  }
+
+  /* Results */
+  .results {
+    text-align: center;
+    padding: 20px;
+  }
+
+  .result-message {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 15px;
+  }
+
+  .winning-team {
+    font-size: 24px;
+    font-weight: bold;
+    margin: 20px 0;
+  }
+
+  .crewmate-win {
+    color: var(--crewmate-blue);
+  }
+
+  .impostor-win {
+    color: var(--impostor-red);
+  }
+
+  .restart-btn {
+    padding: 15px 30px;
+    background: var(--meeting-red);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 20px;
+  }
+
+  @media (max-width: 768px) {
+    .meeting-container {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto auto auto;
+    }
+    .player-list {
+      grid-row: 2;
+    }
+  }
+</style>
+</head>
+<body>
+  <div class="meeting-container">
+    <!-- Header -->
+    <div class="header">
+      <h1>🚨 EMERGENCY MEETING</h1>
+      <div class="game-status">
+        <div class="status-item">Alive: <span id="aliveCount">0</span>/<span id="totalCount">0</span></div>
+        <div class="status-item">Crewmates: <span id="crewmateCount">0</span></div>
+        <div class="status-item">Impostors: <span id="impostorCount">0</span></div>
+        <div class="status-item">Status: <span id="meetingStatus">Discussing</span></div>
+      </div>
+    </div>
+
+    <!-- Player List -->
+    <div class="player-list">
+      <h2>👥 Players</h2>
+      <div id="playersContainer">
+        <!-- Players will be listed here -->
+      </div>
+    </div>
+
+    <!-- Chat Area -->
+    <div class="chat-area">
+      <h2>💬 Discussion</h2>
+      <div class="messages" id="messages">
+        <!-- Messages will appear here -->
+      </div>
+      <div class="chat-input">
+        <input type="text" id="messageInput" placeholder="Type your message..." maxlength="200">
+        <button onclick="sendMessage()">Send</button>
+      </div>
+    </div>
+
+    <!-- Voting Area -->
+    <div class="voting-area">
+      <h2>🗳️ Voting</h2>
+      <div id="votingSection">
+        <p>Discuss with other players and vote who you think is the impostor.</p>
+        <div class="vote-options" id="voteOptions">
+          <!-- Voting options will appear here -->
+        </div>
+        <button class="skip-vote" onclick="skipVote()">Skip Vote</button>
+      </div>
+      <div id="votingResults" style="display: none;">
+        <!-- Voting results will appear here -->
+      </div>
+    </div>
+
+    <!-- Game Results -->
+    <div id="gameResults" class="results" style="display: none;">
+      <!-- Game results will appear here -->
+    </div>
+  </div>
+
+  <script>
+let currentPlayer = null;
+let unsubscribe;
+let gameState = {};
+let players = {};
+
+// Initialize meeting
+async function initializeMeeting() {
+    currentPlayer = JSON.parse(localStorage.getItem('currentPlayer'));
+    
+    if (!currentPlayer) {
+        window.location.href = 'Title screen.html';
+        return;
+    }
+
+    // Check if player is eliminated
+    if (currentPlayer.status === 'eliminated') {
+        document.body.innerHTML = `
+            <div style="text-align: center; padding: 50px; color: #ff4444;">
+                <h1>💀 You Have Been Eliminated</h1>
+                <p>You can still observe the meeting but cannot participate in voting.</p>
+                <button onclick="window.location.href='Title screen.html'" 
+                        style="padding: 10px 20px; background: #ff4444; color: white; border: none; border-radius: 5px; cursor: pointer; margin-top: 20px;">
+                    Return to Lobby
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    // Set up real-time listener
+    unsubscribe = firebaseDB.onDataChange(handleDataUpdate);
+
+    // Initial data load
+    const data = await firebaseDB.getData();
+    handleDataUpdate(data);
+
+    // Send join message
+    await sendSystemMessage(`${currentPlayer.username} joined the meeting`);
+}
+
+function handleDataUpdate(data) {
+    gameState = data.gameState || {};
+    players = data.players || {};
+
+    updatePlayerList();
+    updateGameStatus();
+    updateVotingOptions();
+    checkGameEnd();
+
+    // Check if voting should start
+    if (gameState.voteInProgress && !document.getElementById('votingResults').style.display) {
+        startVoting();
+    }
+}
+
+function updatePlayerList() {
+    const container = document.getElementById('playersContainer');
+    const alivePlayers = Object.values(players).filter(p => p.status !== 'eliminated');
+    const eliminatedPlayers = Object.values(players).filter(p => p.status === 'eliminated');
+
+    container.innerHTML = '';
+
+    // Alive players
+    alivePlayers.forEach(player => {
+        const div = document.createElement('div');
+        div.className = `player-item ${player.role}`;
+        div.innerHTML = `
+            <div>
+                <strong>${player.username}</strong>
+                <div style="font-size: 11px; color: #8fbfcf;">
+                    Score: ${player.score} | Tasks: ${player.completedTasks.length}/3
+                </div>
+            </div>
+            <div class="player-role role-${player.role}">
+                ${player.role === 'impostor' ? '🕵️' : '👨‍🚀'} ${player.role}
+            </div>
+        `;
+        container.appendChild(div);
+    });
+
+    // Eliminated players
+    eliminatedPlayers.forEach(player => {
+        const div = document.createElement('div');
+        div.className = 'player-item eliminated';
+        div.innerHTML = `
+            <div>
+                <strong>${player.username}</strong> 💀
+                <div style="font-size: 11px; color: #8fbfcf;">
+                    ELIMINATED
+                </div>
+            </div>
+            <div class="player-role role-${player.role}">
+                ${player.role === 'impostor' ? '🕵️' : '👨‍🚀'} ${player.role}
+            </div>
+        `;
+        container.appendChild(div);
+    });
+
+    // Update counts
+    document.getElementById('aliveCount').textContent = alivePlayers.length;
+    document.getElementById('totalCount').textContent = Object.keys(players).length;
+    document.getElementById('crewmateCount').textContent = alivePlayers.filter(p => p.role === 'crewmate').length;
+    document.getElementById('impostorCount').textContent = alivePlayers.filter(p => p.role === 'impostor').length;
+}
+
+function updateGameStatus() {
+    const statusElement = document.getElementById('meetingStatus');
+    
+    if (gameState.gameStatus !== 'playing') {
+        statusElement.textContent = 'Game Over';
+        statusElement.style.color = '#ff4444';
+    } else if (gameState.voteInProgress) {
+        statusElement.textContent = 'Voting in Progress';
+        statusElement.style.color = '#ffff00';
+    } else {
+        statusElement.textContent = 'Discussing';
+        statusElement.style.color = '#00ff00';
+    }
+}
+
+function updateVotingOptions() {
+    const optionsContainer = document.getElementById('voteOptions');
+    const alivePlayers = Object.values(players).filter(p => p.status !== 'eliminated' && p.id !== currentPlayer.id);
+
+    optionsContainer.innerHTML = alivePlayers.map(player => `
+        <div class="vote-option" onclick="castVote('${player.id}')">
+            <strong>${player.username}</strong>
+            <div style="font-size: 11px; color: #8fbfcf;">
+                ${player.role === 'impostor' ? '🕵️' : '👨‍🚀'}
+            </div>
+        </div>
+    `).join('');
+}
+
+async function sendMessage() {
+    const input = document.getElementById('messageInput');
+    const message = input.value.trim();
+    
+    if (message && currentPlayer) {
+        await firebaseDB.logActivity(`${currentPlayer.username}: ${message}`, 'chat');
+        input.value = '';
+    }
+}
+
+async function sendSystemMessage(message) {
+    await firebaseDB.logActivity(`SYSTEM: ${message}`, 'system');
+}
+
+async function castVote(targetPlayerId) {
+    if (!currentPlayer || currentPlayer.status === 'eliminated') return;
+
+    // Mark the vote in UI
+    document.querySelectorAll('.vote-option').forEach(option => {
+        option.classList.remove('voted');
+    });
+    event.target.classList.add('voted');
+
+    // Record vote in Firebase
+    await firebase.database().ref(`players/${currentPlayer.id}/votedFor`).set(targetPlayerId);
+    await firebase.database().ref(`players/${currentPlayer.id}/hasVoted`).set(true);
+
+    await sendSystemMessage(`${currentPlayer.username} voted for ${players[targetPlayerId]?.username}`);
+
+    // Check if all players have voted
+    await checkVoteCompletion();
+}
+
+async function skipVote() {
+    if (!currentPlayer || currentPlayer.status === 'eliminated') return;
+
+    await firebase.database().ref(`players/${currentPlayer.id}/hasVoted`).set(true);
+    await firebase.database().ref(`players/${currentPlayer.id}/votedFor`).set(null);
+
+    await sendSystemMessage(`${currentPlayer.username} skipped voting`);
+
+    // Check if all players have voted
+    await checkVoteCompletion();
+}
+
+async function checkVoteCompletion() {
+    const alivePlayers = Object.values(players).filter(p => p.status !== 'eliminated');
+    const votedPlayers = Object.values(players).filter(p => p.hasVoted);
+
+    if (votedPlayers.length === alivePlayers.length) {
+        await tallyVotes();
+    }
+}
+
+async function tallyVotes() {
+    const votes = {};
+    let maxVotes = 0;
+    let ejectedPlayerId = null;
+
+    // Count votes
+    Object.values(players).forEach(player => {
+        if (player.votedFor) {
+            votes[player.votedFor] = (votes[player.votedFor] || 0) + 1;
+            if (votes[player.votedFor] > maxVotes) {
+                maxVotes = votes[player.votedFor];
+                ejectedPlayerId = player.votedFor;
+            }
+        }
+    });
+
+    if (ejectedPlayerId && maxVotes > 0) {
+        const ejectedPlayer = players[ejectedPlayerId];
+        
+        // Eliminate the voted player
+        await firebase.database().ref(`players/${ejectedPlayerId}/status`).set('eliminated');
+        
+        // Log the ejection
+        await sendSystemMessage(`🚨 ${ejectedPlayer.username} was ejected! They were ${ejectedPlayer.role === 'impostor' ? 'an IMPOSTOR! 👻' : 'a CREWMATE. 👨‍🚀'}`);
+
+        // Reset votes for next meeting
+        await resetVotes();
+
+        // Check win conditions
+        await firebaseDB.checkWinConditions();
+    } else {
+        await sendSystemMessage('No one was ejected. The vote was tied or everyone skipped.');
+        await resetVotes();
+    }
+}
+
+async function resetVotes() {
+    const updates = {};
+    Object.keys(players).forEach(playerId => {
+        updates[`players/${playerId}/hasVoted`] = false;
+        updates[`players/${playerId}/votedFor`] = null;
+    });
+    await firebase.database().ref().update(updates);
+}
+
+function checkGameEnd() {
+    if (gameState.gameStatus !== 'playing') {
+        showGameResults();
+    }
+}
+
+function showGameResults() {
+    const resultsContainer = document.getElementById('gameResults');
+    resultsContainer.style.display = 'block';
+
+    const winningTeam = gameState.gameStatus; // 'crewmate_win' or 'impostor_win'
+    const winReason = gameState.winReason || 'Game completed';
+
+    resultsContainer.innerHTML = `
+        <h2>🎮 GAME OVER</h2>
+        <div class="result-message">${winReason}</div>
+        <div class="winning-team ${winningTeam}">
+            ${winningTeam === 'crewmate_win' ? '👨‍🚀 CREWMATES WIN!' : '🕵️ IMPOSTORS WIN!'}
+        </div>
+        
+        <h3>Final Scores</h3>
+        <div style="max-width: 500px; margin: 0 auto;">
+            ${Object.values(players).map(player => `
+                <div style="display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #333;">
+                    <span>${player.username} ${player.role === 'impostor' ? '🕵️' : '👨‍🚀'}</span>
+                    <span>${player.score} points</span>
+                </div>
+            `).join('')}
+        </div>
+
+        <button class="restart-btn" onclick="restartGame()">Play Again</button>
+    `;
+}
+
+async function restartGame() {
+    await firebaseDB.resetGame();
+    window.location.href = 'Title screen.html';
+}
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', initializeMeeting);
+
+// Cleanup when leaving
+window.addEventListener('beforeunload', () => {
+    if (unsubscribe) unsubscribe();
+});
+
+// Enter key to send message
+document.getElementById('messageInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        sendMessage();
+    }
+});
+  </script>
+</body>
+</html>

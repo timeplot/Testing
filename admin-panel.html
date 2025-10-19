@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Panel - Role Management</title>
+    <script src="firebase-config.js"></script>
+    <script src="firebase-game-db.js"></script>
+    <style>
+        body { 
+            font-family: 'Courier New', monospace; 
+            background: #000; 
+            color: #0f0; 
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #0f0;
+            text-align: center;
+            margin-bottom: 30px;
+            text-shadow: 0 0 10px #0f0;
+        }
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        button {
+            background: #333;
+            color: #0f0;
+            border: 1px solid #0f0;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            transition: all 0.3s ease;
+        }
+        button:hover {
+            background: #0f0;
+            color: #000;
+        }
+        .player-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+        }
+        .player-card {
+            background: rgba(0, 255, 0, 0.1);
+            border: 1px solid #0f0;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        .player-card.impostor {
+            background: rgba(255, 0, 0, 0.1);
+            border-color: #f00;
+        }
+        .player-card.eliminated {
+            opacity: 0.6;
+            background: rgba(255, 255, 255, 0.1);
+        }
+        .player-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .player-name {
+            font-weight: bold;
+            font-size: 16px;
+        }
+        .player-role {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .role-crewmate {
+            background: rgba(0, 255, 0, 0.2);
+            color: #0f0;
+        }
+        .role-impostor {
+            background: rgba(255, 0, 0, 0.2);
+            color: #f00;
+        }
+        .player-details {
+            font-size: 12px;
+            color: #8fbfcf;
+        }
+        .player-actions {
+            display: flex;
+            gap: 5px;
+            margin-top: 10px;
+        }
+        .player-actions button {
+            padding: 5px 10px;
+            font-size: 11px;
+        }
+        .game-info {
+            background: rgba(0, 255, 0, 0.1);
+            border: 1px solid #0f0;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: rgba(0, 255, 0, 0.05);
+            border: 1px solid #0f0;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #0f0;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #8fbfcf;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛠️ Admin Panel - Game Management</h1>
+        
+        <div class="game-info">
+            <h3>Game Controls</h3>
+            <div class="controls">
+                <button onclick="assignRoles()">🔄 Auto Assign Roles</button>
+                <button onclick="resetGame()">🔄 Reset Game</button>
+                <button onclick="forceStart()">🎮 Force Start Game</button>
+                <button onclick="clearAllData()">🗑️ Clear All Data</button>
+                <button onclick="simulateSabotage()">⚡ Simulate Sabotage</button>
+                <button onclick="simulateKill()">🔪 Simulate Kill</button>
+            </div>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="totalPlayers">0</div>
+                <div class="stat-label">Total Players</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="onlinePlayers">0</div>
+                <div class="stat-label">Online Players</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="impostorCount">0</div>
+                <div class="stat-label">Impostors</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="eliminatedCount">0</div>
+                <div class="stat-label">Eliminated</div>
+            </div>
+        </div>
+
+        <h2>Player Management</h2>
+        <div class="player-grid" id="playersList">
+            <!-- Players will be listed here -->
+        </div>
+    </div>
+    
+    <script>
+        let unsubscribe;
+
+        async function loadPlayers() {
+            const players = await firebaseDB.getPlayers();
+            const gameState = await firebaseDB.getGameState();
+            
+            updateStats(players, gameState);
+            renderPlayerList(players);
+        }
+        
+        function updateStats(players, gameState) {
+            const playerArray = Object.values(players);
+            
+            document.getElementById('totalPlayers').textContent = playerArray.length;
+            document.getElementById('onlinePlayers').textContent = playerArray.filter(p => p.status === 'online').length;
+            document.getElementById('impostorCount').textContent = playerArray.filter(p => p.role === 'impostor').length;
+            document.getElementById('eliminatedCount').textContent = playerArray.filter(p => p.status === 'eliminated').length;
+        }
+        
+        function renderPlayerList(players) {
+            const list = document.getElementById('playersList');
+            
+            list.innerHTML = Object.values(players).map(player => {
+                const isEliminated = player.status === 'eliminated';
+                const isImpostor = player.role === 'impostor';
+                
+                return `
+                <div class="player-card ${isImpostor ? 'impostor' : ''} ${isEliminated ? 'eliminated' : ''}">
+                    <div class="player-header">
+                        <div class="player-name">
+                            ${player.username}
+                            ${isEliminated ? ' 💀' : ''}
+                        </div>
+                        <div class="player-role role-${player.role}">
+                            ${player.role.toUpperCase()}
+                        </div>
+                    </div>
+                    <div class="player-details">
+                        <div>Score: ${player.score}</div>
+                        <div>Tasks: ${player.completedTasks.length}/3</div>
+                        <div>Status: ${player.status}</div>
+                        <div>Failed: ${player.failedChallenges.length}</div>
+                        ${player.isVulnerable ? '<div style="color: #ff0;">🔴 VULNERABLE</div>' : ''}
+                    </div>
+                    <div class="player-actions">
+                        <button onclick="makeImpostor('${player.id}')">Make Impostor</button>
+                        <button onclick="makeCrewmate('${player.id}')">Make Crewmate</button>
+                        <button onclick="eliminatePlayer('${player.id}')">Eliminate</button>
+                        <button onclick="revivePlayer('${player.id}')">Revive</button>
+                        <button onclick="resetPlayer('${player.id}')">Reset</button>
+                    </div>
+                </div>
+                `;
+            }).join('');
+        }
+        
+        async function assignRoles() {
+            await firebaseDB.assignRoles();
+            alert('Roles assigned!');
+            loadPlayers();
+        }
+        
+        async function resetGame() {
+            await firebaseDB.resetGame();
+            alert('Game reset!');
+            loadPlayers();
+        }
+        
+        async function forceStart() {
+            await firebaseDB.assignRoles();
+            alert('Game forced to start!');
+        }
+        
+        async function clearAllData() {
+            if (confirm('Are you sure you want to clear ALL game data? This cannot be undone!')) {
+                await firebase.database().ref().set({});
+                alert('All data cleared!');
+                loadPlayers();
+            }
+        }
+        
+        async function makeImpostor(playerId) {
+            const player = await firebaseDB.getPlayer(playerId);
+            await firebase.database().ref(`players/${playerId}/role`).set('impostor');
+            await firebaseDB.logActivity(`ADMIN: ${player.username} manually assigned as IMPOSTOR`, 'admin');
+            loadPlayers();
+        }
+        
+        async function makeCrewmate(playerId) {
+            const player = await firebaseDB.getPlayer(playerId);
+            await firebase.database().ref(`players/${playerId}/role`).set('crewmate');
+            await firebaseDB.logActivity(`ADMIN: ${player.username} manually assigned as CREWMATE`, 'admin');
+            loadPlayers();
+        }
+        
+        async function eliminatePlayer(playerId) {
+            const player = await firebaseDB.getPlayer(playerId);
+            await firebase.database().ref(`players/${playerId}/status`).set('eliminated');
+            await firebaseDB.logActivity(`ADMIN: ${player.username} was eliminated by admin`, 'admin');
+            loadPlayers();
+        }
+        
+        async function revivePlayer(playerId) {
+            const player = await firebaseDB.getPlayer(playerId);
+            await firebase.database().ref(`players/${playerId}/status`).set('online');
+            await firebaseDB.logActivity(`ADMIN: ${player.username} was revived by admin`, 'admin');
+            loadPlayers();
+        }
+        
+        async function resetPlayer(playerId) {
+            await firebase.database().ref(`players/${playerId}`).update({
+                completedTasks: [],
+                failedChallenges: [],
+                isVulnerable: false,
+                currentTask: 0
+            });
+            alert('Player progress reset!');
+            loadPlayers();
+        }
+        
+        async function simulateSabotage() {
+            await firebaseDB.triggerSabotage('admin', 'comms');
+            alert('Sabotage simulated!');
+        }
+        
+        async function simulateKill() {
+            const players = await firebaseDB.getPlayers();
+            const crewmates = Object.values(players).filter(p => p.role === 'crewmate' && p.status !== 'eliminated');
+            const impostors = Object.values(players).filter(p => p.role === 'impostor');
+            
+            if (crewmates.length > 0 && impostors.length > 0) {
+                const randomCrewmate = crewmates[Math.floor(Math.random() * crewmates.length)];
+                const randomImpostor = impostors[Math.floor(Math.random() * impostors.length)];
+                
+                await firebaseDB.performKill(randomImpostor.id, randomCrewmate.id);
+                alert(`Simulated kill: ${randomImpostor.username} eliminated ${randomCrewmate.username}`);
+            } else {
+                alert('Need at least one crewmate and one impostor to simulate kill');
+            }
+            loadPlayers();
+        }
+        
+        // Load players on start
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadPlayers();
+            
+            // Set up real-time updates
+            unsubscribe = firebaseDB.onDataChange((data) => {
+                loadPlayers();
+            });
+        });
+        
+        // Refresh every 10 seconds
+        setInterval(loadPlayers, 10000);
+        
+        // Cleanup
+        window.addEventListener('beforeunload', () => {
+            if (unsubscribe) unsubscribe();
+        });
+    </script>
+</body>
+</html>

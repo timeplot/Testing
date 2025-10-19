@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Impostor Control Panel - Complete Dashboard</title>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database.js"></script>
+<script src="firebase-config.js"></script>
+<script src="firebase-game-db.js"></script>
+
+<style>
+  :root {
+    --primary-red: #ff0000;
+    --dark-red: #cc0000;
+    --light-red: #ff4444;
+    --dark-bg: #0a0a0a;
+    --panel-bg: #111111;
+    --text-red: #ff6b6b;
+    --text-muted: #cccccc;
+    --success: #00ff00;
+    --warning: #ffff00;
+    --cooldown: #ffaa00;
+    --crewmate-blue: #6bc4ff;
+    --impostor-red: #ff6b6b;
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    background: linear-gradient(135deg, #000000, #1a0000);
+    color: var(--text-red);
+    font-family: 'Courier New', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .container {
+    display: grid;
+    grid-template-columns: 280px 1fr 350px;
+    grid-template-rows: auto 1fr auto;
+    gap: 15px;
+    padding: 20px;
+    min-height: 100vh;
+    max-width: 2000px;
+    margin: 0 auto;
+  }
+
+  /* Header */
+  .header {
+    grid-column: 1 / -1;
+    background: var(--panel-bg);
+    border: 2px solid var(--primary-red);
+    border-radius: 10px;
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .game-stats {
+    display: flex;
+    gap: 20px;
+    font-size: 14px;
+  }
+
+  .stat-item {
+    background: rgba(255, 0, 0, 0.1);
+    padding: 8px 15px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 0, 0, 0.3);
+  }
+
+  /* Navigation Sidebar */
+  .sidebar {
+    background: var(--panel-bg);
+    border: 2px solid var(--primary-red);
+    border-radius: 10px;
+    padding: 20px;
+    grid-row: 2 / 4;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .nav-section {
+    margin-bottom: 10px;
+  }
+
+  .nav-title {
+    color: var(--light-red);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 0, 0, 0.3);
+    font-size: 14px;
+  }
+
+  .nav-btn {
+    width: 100%;
+    background: rgba(255, 0, 0, 0.05);
+    border: 1px solid rgba(255, 0, 0, 0.2);
+    color: var(--text-red);
+    padding: 12px;
+    margin-bottom: 6px;
+    border-radius: 6px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.3s ease;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+  }
+
+  .nav-btn:hover {
+    background: rgba(255, 0, 0, 0.1);
+    border-color: var(--primary-red);
+    transform: translateX(5px);
+  }
+
+  .nav-btn.active {
+    background: rgba(255, 0, 0, 0.2);
+    border-color: var(--primary-red);
+    font-weight: bold;
+  }
+
+  /* Main Content Area */
+  .main-content {
+    background: var(--panel-bg);
+    border: 2px solid var(--primary-red);
+    border-radius: 10px;
+    padding: 20px;
+    grid-row: 2 / 4;
+    overflow-y: auto;
+  }
+
+  .content-section {
+    display: none;
+  }
+
+  .content-section.active {
+    display: block;
+  }
+
+  .section-title {
+    color: var(--light-red);
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 0, 0, 0.3);
+  }
+
+  /* Player Surveillance */
+  .players-grid {
+    display: grid;
+    gap: 12px;
+  }
+
+  .player-card {
+    background: rgba(255, 0, 0, 0.05);
+    border: 1px solid rgba(255, 0, 0, 0.3);
+    border-radius: 8px;
+    padding: 15px;
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 15px;
+    align-items: center;
+    transition: all 0.3s ease;
+  }
+
+  .player-card:hover {
+    background: rgba(255, 0, 0, 0.1);
+  }
+
+  .player-card.crewmate { border-left: 4px solid var(--crewmate-blue); }
+  .player-card.impostor { border-left: 4px solid var(--primary-red); }
+  .player-card.eliminated { border-left: 4px solid #666; opacity: 0.6; }
+  .player-card.vulnerable { 
+    border-left: 4px solid var(--warning);
+    background: rgba(255, 255, 0, 0.1);
+  }
+
+  .player-info {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .player-name {
+    font-weight: bold;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .player-details {
+    display: flex;
+    gap: 15px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .player-status {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+  }
+
+  .status-online { color: var(--success); }
+  .status-offline { color: #666; }
+  .status-busy { color: var(--warning); }
+  .status-eliminated { color: #ff0000; }
+  .status-in-meeting { color: var(--cooldown); }
+
+  .progress-bar {
+    width: 80px;
+    height: 6px;
+    background: #333;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary-red), var(--light-red));
+    transition: width 0.5s ease;
+  }
+
+  /* Kill Controls */
+  .kill-interface {
+    background: rgba(255, 0, 0, 0.1);
+    border: 2px solid var(--primary-red);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+
+  .cooldown-display {
+    background: rgba(255, 170, 0, 0.2);
+    padding: 10px;
+    border-radius: 6px;
+    text-align: center;
+    margin-bottom: 15px;
+    font-size: 14px;
+  }
+
+  .cooldown-active {
+    color: var(--cooldown);
+    animation: pulse 1s infinite;
+  }
+
+  .kill-limit {
+    background: rgba(255, 0, 0, 0.3);
+    padding: 10px;
+    border-radius: 6px;
+    text-align: center;
+    margin-bottom: 15px;
+    font-weight: bold;
+  }
+
+  .vulnerable-players {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .vulnerable-player {
+    background: rgba(255, 0, 0, 0.2);
+    border: 1px solid var(--primary-red);
+    border-radius: 6px;
+    padding: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+
+  .vulnerable-player:hover {
+    background: rgba(255, 0, 0, 0.3);
+    transform: translateX(5px);
+  }
+
+  .vulnerable-player.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: rgba(255, 0, 0, 0.1);
+  }
+
+  .vulnerable-player.disabled:hover {
+    transform: none;
+    background: rgba(255, 0, 0, 0.1);
+  }
+
+  .kill-confirmation {
+    background: rgba(255, 0, 0, 0.3);
+    border: 2px solid var(--primary-red);
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+    display: none;
+  }
+
+  .kill-buttons {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    margin-top: 15px;
+  }
+
+  .kill-btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: all 0.3s ease;
+  }
+
+  .kill-confirm {
+    background: var(--primary-red);
+    color: white;
+  }
+
+  .kill-cancel {
+    background: #666;
+    color: white;
+  }
+
+  /* Sabotage Controls */
+  .sabotage-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+  }
+
+  .sabotage-card {
+    background: rgba(255, 0, 0, 0.05);
+    border: 1px solid rgba(255, 0, 0, 0.3);
+    border-radius: 8px;
+    padding: 15px;
+    text-align: center;
+    transition: all 0.3s ease;
+  }
+
+  .sabotage-card:hover {
+    background: rgba(255, 0, 0, 0.1);
+    transform: translateY(-2px);
+  }
+
+  .sabotage-btn {
+    background: var(--primary-red);
+    color: black;
+    border: none;
+    padding: 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    width: 100%;
+    margin-top: 10px;
+    transition: all 0.3s ease;
+  }
+
+  .sabotage-btn:hover:not(:disabled) {
+    background: var(--light-red);
+  }
+
+  .sabotage-btn:disabled {
+    background: #666;
+    cursor: not-allowed;
+  }
+
+  /* Task Progress */
+  .tasks-overview {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 15px;
+  }
+
+  .task-category {
+    background: rgba(255, 0, 0, 0.05);
+    border: 1px solid rgba(255, 0, 0, 0.3);
+    border-radius: 8px;
+    padding: 15px;
+  }
+
+  .task-list {
+    list-style: none;
+    margin-top: 10px;
+  }
+
+  .task-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255, 0, 0, 0.1);
+    font-size: 12px;
+  }
+
+  .task-completed { color: var(--success); }
+  .task-in-progress { color: var(--warning); }
+  .task-failed { color: var(--primary-red); }
+
+  /* Activity Feed */
+  .activity-sidebar {
+    background: var(--panel-bg);
+    border: 2px solid var(--primary-red);
+    border-radius: 10px;
+    padding: 20px;
+    grid-row: 2 / 4;
+    overflow-y: auto;
+  }
+
+  .activity-feed {
+    max-height: 600px;
+    overflow-y: auto;
+  }
+
+  .activity-item {
+    background: rgba(255, 0, 0, 0.05);
+    border-left: 3px solid var(--primary-red);
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 0 6px 6px 0;
+    font-size: 12px;
+  }
+
+  .activity-time {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 5px;
+  }
+
+  /* Animations */
+  @keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+  }
+
+  /* Responsive */
+  @media (max-width: 1200px) {
+    .container {
+      grid-template-columns: 250px 1fr;
+    }
+    .activity-sidebar {
+      grid-column: 1 / -1;
+      grid-row: 3;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .container {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto auto auto;
+    }
+    .sidebar, .main-content, .activity-sidebar {
+      grid-column: 1 / -1;
+    }
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1>🕵️ IMPOSTOR CONTROL PANEL</h1>
+      <div class="game-stats">
+        <div class="stat-item">Round: <span id="currentRound">1</span></div>
+        <div class="stat-item">Online: <span id="onlineCount">0</span>/<span id="totalPlayers">0</span></div>
+        <div class="stat-item">Impostors: <span id="impostorCount">0</span></div>
+        <div class="stat-item">Vulnerable: <span id="vulnerableCount">0</span></div>
+      </div>
+    </div>
+
+    <!-- Navigation Sidebar -->
+    <div class="sidebar">
+      <div class="nav-section">
+        <h3 class="nav-title">🎮 DASHBOARD</h3>
+        <button class="nav-btn active" onclick="showSection('surveillance')">👥 Player Surveillance</button>
+        <button class="nav-btn" onclick="showSection('elimination')">🔪 Elimination Control</button>
+        <button class="nav-btn" onclick="showSection('sabotage')">⚡ Sabotage Systems</button>
+        <button class="nav-btn" onclick="showSection('progress')">📊 Task Progress</button>
+      </div>
+
+      <div class="nav-section">
+        <h3 class="nav-title">🎯 QUICK ACTIONS</h3>
+        <button class="nav-btn" onclick="triggerSabotage('comms')">📡 Disable Communications</button>
+        <button class="nav-btn" onclick="triggerSabotage('lights')">💡 Cut Lights</button>
+        <button class="nav-btn" onclick="triggerSabotage('oxygen')">🌬️ Sabotage Oxygen</button>
+        <button class="nav-btn" onclick="showSection('elimination')">🔪 Quick Kill Menu</button>
+      </div>
+
+      <div class="nav-section">
+        <h3 class="nav-title">⚙️ SYSTEM</h3>
+        <button class="nav-btn" onclick="refreshAllData()">🔄 Refresh Data</button>
+        <button class="nav-btn" onclick="showSection('settings')">⚙️ Settings</button>
+        <button class="nav-btn" onclick="logout()">🚪 Logout</button>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <!-- Player Surveillance -->
+      <div id="surveillance" class="content-section active">
+        <h2 class="section-title">👥 REAL-TIME PLAYER SURVEILLANCE</h2>
+        <div class="players-grid" id="playersGrid">
+          <!-- Player cards will be populated here -->
+        </div>
+      </div>
+
+      <!-- Elimination Control -->
+      <div id="elimination" class="content-section">
+        <h2 class="section-title">🔪 ELIMINATION CONTROL</h2>
+        
+        <div class="kill-interface">
+          <div class="cooldown-display" id="killCooldown">
+            Kill Cooldown: <span id="cooldownTimer">0</span> seconds
+          </div>
+
+          <div class="kill-limit" id="killLimitDisplay">
+            Kills Remaining: <span id="killsRemaining">3</span>/3
+          </div>
+
+          <h3>Vulnerable Targets</h3>
+          <div class="vulnerable-players" id="vulnerablePlayers">
+            <!-- Vulnerable players will appear here -->
+          </div>
+
+          <div class="kill-confirmation" id="killConfirmation">
+            <h3>Confirm Elimination</h3>
+            <p>Target: <strong id="confirmTargetName">Unknown</strong></p>
+            <p>Reason: <span id="confirmKillReason">Multiple failed challenges</span></p>
+            <div class="kill-buttons">
+              <button class="kill-btn kill-confirm" onclick="executeKill()">✅ CONFIRM KILL</button>
+              <button class="kill-btn kill-cancel" onclick="cancelKill()">❌ CANCEL</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="kill-history">
+          <h3>Elimination History</h3>
+          <div id="killHistory">
+            <!-- Kill history will appear here -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Sabotage Systems -->
+      <div id="sabotage" class="content-section">
+        <h2 class="section-title">⚡ SABOTAGE SYSTEMS</h2>
+        
+        <div class="sabotage-grid">
+          <div class="sabotage-card">
+            <h3>📡 Communications</h3>
+            <p>Disable crewmate communications for 60 seconds</p>
+            <button class="sabotage-btn" id="commsBtn" onclick="triggerSabotage('comms')">
+              DISABLE COMMS
+            </button>
+            <div class="cooldown" id="commsCooldown"></div>
+          </div>
+
+          <div class="sabotage-card">
+            <h3>💡 Lighting</h3>
+            <p>Reduce visibility for crewmates for 45 seconds</p>
+            <button class="sabotage-btn" id="lightsBtn" onclick="triggerSabotage('lights')">
+              CUT LIGHTS
+            </button>
+            <div class="cooldown" id="lightsCooldown"></div>
+          </div>
+
+          <div class="sabotage-card">
+            <h3>🌬️ Oxygen</h3>
+            <p>Trigger oxygen depletion emergency</p>
+            <button class="sabotage-btn" id="oxygenBtn" onclick="triggerSabotage('oxygen')">
+              SABOTAGE O2
+            </button>
+            <div class="cooldown" id="oxygenCooldown"></div>
+          </div>
+
+          <div class="sabotage-card">
+            <h3>⚡ Reactor</h3>
+            <p>Initiate reactor meltdown sequence</p>
+            <button class="sabotage-btn" id="reactorBtn" onclick="triggerSabotage('reactor')">
+              OVERLOAD REACTOR
+            </button>
+            <div class="cooldown" id="reactorCooldown"></div>
+          </div>
+        </div>
+
+        <div class="custom-sabotage" style="margin-top: 20px;">
+          <h3>Custom Sabotage Command</h3>
+          <input type="text" id="customSabotageInput" placeholder="Enter custom sabotage command..." 
+                 style="width: 100%; padding: 10px; background: #222; color: white; border: 1px solid red; border-radius: 4px; margin-bottom: 10px;">
+          <button class="sabotage-btn" onclick="executeCustomSabotage()" style="width: auto;">
+            EXECUTE CUSTOM SABOTAGE
+          </button>
+        </div>
+      </div>
+
+      <!-- Task Progress -->
+      <div id="progress" class="content-section">
+        <h2 class="section-title">📊 CREWMATE TASK PROGRESS</h2>
+        
+        <div class="tasks-overview" id="tasksOverview">
+          <!-- Task progress will be populated here -->
+        </div>
+
+        <div class="progress-summary" style="margin-top: 20px;">
+          <h3>Overall Progress</h3>
+          <div class="progress-bar" style="width: 100%; height: 20px; background: #333; border-radius: 10px; overflow: hidden;">
+            <div class="progress-fill" id="overallProgress" style="height: 100%; width: 0%;"></div>
+          </div>
+          <div style="text-align: center; margin-top: 10px;">
+            <span id="progressText">0% Complete</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Settings -->
+      <div id="settings" class="content-section">
+        <h2 class="section-title">⚙️ IMPOSTOR SETTINGS</h2>
+        <div class="settings-grid">
+          <div class="setting-item">
+            <h3>Kill Confirmation</h3>
+            <label>
+              <input type="checkbox" id="confirmKills" checked>
+              Require confirmation before eliminating
+            </label>
+          </div>
+          <div class="setting-item">
+            <h3>Auto-Refresh</h3>
+            <label>
+              <input type="checkbox" id="autoRefresh" checked>
+              Auto-refresh data every 5 seconds
+            </label>
+          </div>
+          <div class="setting-item">
+            <h3>Sound Effects</h3>
+            <label>
+              <input type="checkbox" id="soundEffects" checked>
+              Enable sound effects
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Activity Sidebar -->
+    <div class="activity-sidebar">
+      <h2 class="section-title">📊 REAL-TIME ACTIVITY FEED</h2>
+      <div class="activity-feed" id="activityFeed">
+        <!-- Activity items will be populated here -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+// Unified Impostor Panel JavaScript
+let currentImpostor = null;
+let selectedTarget = null;
+let refreshInterval = null;
+let unsubscribe = null;
+let autoRefresh = true;
+
+// Initialize impostor panel
+async function initializeImpostorPanel() {
+    currentImpostor = JSON.parse(localStorage.getItem('currentPlayer'));
+    
+    if (!currentImpostor || currentImpostor.role !== 'impostor') {
+        alert('Access denied! Impostors only.');
+        window.location.href = 'Title screen.html';
+        return;
+    }
+
+    // Set up real-time listener
+    unsubscribe = firebaseDB.onDataChange(handleDataUpdate);
+    
+    // Initial data load
+    const data = await firebaseDB.getImpostorDashboardData();
+    handleDataUpdate(data);
+    
+    // Start auto-refresh
+    startAutoRefresh();
+    
+    // Update cooldowns every second
+    setInterval(updateCooldowns, 1000);
+}
+
+// Handle real-time data updates
+function handleDataUpdate(data) {
+    updateDashboard(data);
+    updateActivityFeed(data.recentActivities || []);
+}
+
+function updateDashboard(data) {
+    // Update header stats
+    document.getElementById('currentRound').textContent = data.gameState?.currentRound || 1;
+    document.getElementById('onlineCount').textContent = data.onlineCount || 0;
+    document.getElementById('totalPlayers').textContent = data.totalPlayers || 0;
+    document.getElementById('impostorCount').textContent = data.impostorCount || 0;
+    document.getElementById('vulnerableCount').textContent = data.vulnerableCount || 0;
+    
+    // Update players grid
+    updatePlayersGrid(data.players || []);
+    
+    // Update kill cooldown and limits
+    updateKillCooldown();
+    updateKillLimit(data.killsRemaining || 3);
+    
+    // Update vulnerable players
+    updateVulnerablePlayers(data.players || [], data.killsRemaining || 3);
+    
+    // Update task progress
+    updateTaskProgress(data);
+    
+    // Update sabotage cooldowns
+    updateSabotageCooldowns(data.gameState);
+}
+
+function updatePlayersGrid(players) {
+    const grid = document.getElementById('playersGrid');
+    
+    grid.innerHTML = Object.values(players).map(player => {
+        const progress = (player.completedTasks.length / 3) * 100;
+        const isVulnerable = player.isVulnerable && player.role === 'crewmate' && player.status !== 'eliminated';
+        const statusClass = `status-${player.status}`;
+        
+        return `
+        <div class="player-card ${player.role} ${player.status === 'eliminated' ? 'eliminated' : ''} ${isVulnerable ? 'vulnerable' : ''}" 
+             data-player-id="${player.id}">
+            <div class="player-info">
+                <div class="player-name">
+                    ${player.username}
+                    ${player.role === 'impostor' ? ' 🕵️' : ''}
+                    ${player.status === 'eliminated' ? ' 💀' : ''}
+                    ${isVulnerable ? ' 🔴' : ''}
+                </div>
+                <div class="player-details">
+                    <span>${player.role}</span>
+                    <span>Score: ${player.score}</span>
+                    <span>Tasks: ${player.completedTasks.length}/3</span>
+                    ${player.failedChallenges.length > 0 ? 
+                        `<span style="color: var(--warning);">Failed: ${player.failedChallenges.length}</span>` : ''}
+                </div>
+            </div>
+            <div class="player-status">
+                <div class="${statusClass}">
+                    ${getStatusIcon(player.status)} ${player.status.toUpperCase()}
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: ${progress}%"></div>
+                </div>
+                <div>${getCurrentTaskName(player.currentTask)}</div>
+            </div>
+        </div>
+        `;
+    }).join('');
+}
+
+function updateKillLimit(killsRemaining) {
+    const killLimitDisplay = document.getElementById('killLimitDisplay');
+    const killsRemainingElement = document.getElementById('killsRemaining');
+    
+    killsRemainingElement.textContent = killsRemaining;
+    
+    if (killsRemaining <= 0) {
+        killLimitDisplay.style.background = 'rgba(255, 0, 0, 0.5)';
+        killLimitDisplay.innerHTML = '❌ MAX KILLS REACHED (3/3)';
+    } else {
+        killLimitDisplay.style.background = 'rgba(255, 170, 0, 0.3)';
+        killLimitDisplay.innerHTML = `Kills Remaining: <span id="killsRemaining">${killsRemaining}</span>/3`;
+    }
+}
+
+function updateVulnerablePlayers(players, killsRemaining) {
+    const container = document.getElementById('vulnerablePlayers');
+    const vulnerablePlayers = Object.values(players).filter(player => 
+        player.role === 'crewmate' && 
+        player.status !== 'eliminated' &&
+        player.isVulnerable
+    );
+    
+    if (vulnerablePlayers.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 20px; color: #666;">
+                <p>No vulnerable targets available.</p>
+                <p>Wait for crewmates to fail challenges 3 times.</p>
+            </div>
+        `;
+    } else if (killsRemaining <= 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 20px; color: #ff0000;">
+                <p>❌ MAX KILLS REACHED</p>
+                <p>You've used all 3 kills this round.</p>
+                <p>Wait for next round or win by other means.</p>
+            </div>
+        `;
+    } else {
+        container.innerHTML = vulnerablePlayers.map(player => {
+            return `
+            <div class="vulnerable-player" onclick="selectTarget('${player.id}')">
+                <div>
+                    <strong>${player.username}</strong>
+                    <div style="font-size: 12px; color: #ccc;">
+                        Failed ${player.failedChallenges.length} challenge(s) | ${getCurrentTaskName(player.currentTask)}
+                    </div>
+                </div>
+                <div style="color: var(--warning); font-weight: bold;">
+                    ELIMINATE →<br>
+                    <small style="font-size: 10px;">Kills left: ${killsRemaining}</small>
+                </div>
+            </div>
+            `;
+        }).join('');
+    }
+}
+
+async function selectTarget(playerId) {
+    if (!currentImpostor) return;
+    
+    // Check kill limit first
+    const dashboardData = await firebaseDB.getImpostorDashboardData();
+    if (dashboardData.killsRemaining <= 0) {
+        alert('❌ Maximum kills reached this round (3/3)');
+        return;
+    }
+    
+    const killCheck = await firebaseDB.performKill(currentImpostor.id, playerId);
+    
+    if (!killCheck.success) {
+        alert(`Cannot eliminate: ${killCheck.reason}`);
+        return;
+    }
+    
+    const data = await firebaseDB.getData();
+    const target = data.players[playerId];
+    
+    if (!target) return;
+    
+    selectedTarget = target;
+    document.getElementById('confirmTargetName').textContent = target.username;
+    document.getElementById('confirmKillReason').textContent = 
+        `Failed ${target.failedChallenges.length} challenges - VULNERABLE TARGET`;
+    document.getElementById('killConfirmation').style.display = 'block';
+}
+
+async function executeKill() {
+    if (!selectedTarget || !currentImpostor) return;
+    
+    const result = await firebaseDB.performKill(currentImpostor.id, selectedTarget.id);
+    
+    if (result.success) {
+        alert(`✅ ${result.message}`);
+        document.getElementById('killConfirmation').style.display = 'none';
+        selectedTarget = null;
+        
+        // Refresh data
+        const data = await firebaseDB.getImpostorDashboardData();
+        handleDataUpdate(data);
+    } else {
+        alert(`❌ ${result.reason}`);
+    }
+}
+
+function cancelKill() {
+    document.getElementById('killConfirmation').style.display = 'none';
+    selectedTarget = null;
+}
+
+async function updateKillCooldown() {
+    if (!currentImpostor) return;
+    
+    const cooldown = await firebaseDB.getKillCooldown(currentImpostor.id);
+    const cooldownTimer = document.getElementById('cooldownTimer');
+    const cooldownDisplay = document.getElementById('killCooldown');
+    
+    cooldownTimer.textContent = cooldown;
+    
+    if (cooldown > 0) {
+        cooldownDisplay.classList.add('cooldown-active');
+        cooldownDisplay.innerHTML = `Kill Cooldown: <span id="cooldownTimer">${cooldown}</span> seconds`;
+    } else {
+        cooldownDisplay.classList.remove('cooldown-active');
+        cooldownDisplay.innerHTML = `Kill Cooldown: <span id="cooldownTimer">${cooldown}</span> seconds - READY`;
+    }
+}
+
+// Sabotage System
+async function triggerSabotage(type) {
+    if (!currentImpostor) return;
+    
+    const result = await firebaseDB.triggerSabotage(currentImpostor.id, type);
+    
+    if (result.success) {
+        alert(`✅ ${result.message}`);
+    } else {
+        alert(`❌ ${result.message}`);
+    }
+}
+
+async function executeCustomSabotage() {
+    const input = document.getElementById('customSabotageInput');
+    const command = input.value.trim();
+    
+    if (command && currentImpostor) {
+        // Send custom sabotage via activity log
+        await firebaseDB.logActivity(`CUSTOM SABOTAGE by ${currentImpostor.username}: ${command}`, 'sabotage');
+        input.value = '';
+        alert('Custom sabotage command logged!');
+    }
+}
+
+function updateSabotageCooldowns(gameState) {
+    const sabotages = ['comms', 'lights', 'oxygen', 'reactor'];
+    const now = Date.now();
+    
+    sabotages.forEach(type => {
+        const cooldown = gameState?.sabotageCooldowns?.[type];
+        const btn = document.getElementById(`${type}Btn`);
+        const cooldownEl = document.getElementById(`${type}Cooldown`);
+        
+        if (cooldown && now < cooldown) {
+            const remaining = Math.ceil((cooldown - now) / 1000);
+            btn.disabled = true;
+            btn.textContent = `COOLDOWN: ${remaining}s`;
+            if (cooldownEl) cooldownEl.textContent = `${remaining}s`;
+        } else {
+            btn.disabled = false;
+            // Reset button text based on type
+            const buttonTexts = {
+                comms: 'DISABLE COMMS',
+                lights: 'CUT LIGHTS', 
+                oxygen: 'SABOTAGE O2',
+                reactor: 'OVERLOAD REACTOR'
+            };
+            btn.textContent = buttonTexts[type];
+            if (cooldownEl) cooldownEl.textContent = 'READY';
+        }
+    });
+}
+
+// Task Progress
+function updateTaskProgress(data) {
+    const overview = document.getElementById('tasksOverview');
+    const overallProgress = document.getElementById('overallProgress');
+    const progressText = document.getElementById('progressText');
+    
+    overallProgress.style.width = `${data.crewmateProgress}%`;
+    progressText.textContent = `${Math.round(data.crewmateProgress)}% Complete`;
+    
+    // Task categories
+    const taskCategories = {
+        'Network Security': Math.floor(data.crewmateProgress * 0.3),
+        'Phishing Detection': Math.floor(data.crewmateProgress * 0.25),
+        'Firewall Building': Math.floor(data.crewmateProgress * 0.25),
+        'System Maintenance': Math.floor(data.crewmateProgress * 0.2)
+    };
+    
+    overview.innerHTML = Object.entries(taskCategories).map(([category, progress]) => `
+        <div class="task-category">
+            <h4>${category}</h4>
+            <div class="task-list">
+                <div class="task-item">
+                    <span>Progress</span>
+                    <span class="task-in-progress">${progress}%</span>
+                </div>
+                <div class="task-item">
+                    <span>Remaining</span>
+                    <span class="task-in-progress">${100 - progress}%</span>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Activity Feed
+function updateActivityFeed(activities) {
+    const feed = document.getElementById('activityFeed');
+    
+    feed.innerHTML = activities.map(activity => `
+        <div class="activity-item">
+            <div class="activity-time">
+                ${new Date(activity.timestamp).toLocaleTimeString()}
+            </div>
+            <div>${activity.message}</div>
+        </div>
+    `).join('');
+    
+    // Auto-scroll to bottom
+    feed.scrollTop = feed.scrollHeight;
+}
+
+// Utility Functions
+function getStatusIcon(status) {
+    const icons = {
+        'online': '🟢',
+        'offline': '⚫',
+        'busy': '🟡',
+        'eliminated': '💀',
+        'in-meeting': '🚨'
+    };
+    return icons[status] || '⚫';
+}
+
+function getCurrentTaskName(taskId) {
+    const tasks = [
+        'Network Analysis', 'Email Sorting', 'Firewall Config',
+        'Security Audit', 'System Scan', 'In Meeting'
+    ];
+    return tasks[taskId] || 'Idle';
+}
+
+// Navigation
+function showSection(sectionId) {
+    // Hide all sections
+    document.querySelectorAll('.content-section').forEach(section => {
+        section.classList.remove('active');
+    });
+    
+    // Remove active class from all nav buttons
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // Show selected section
+    document.getElementById(sectionId).classList.add('active');
+    
+    // Activate corresponding nav button
+    event.target.classList.add('active');
+}
+
+// Auto-refresh system
+function startAutoRefresh() {
+    if (refreshInterval) clearInterval(refreshInterval);
+    
+    if (autoRefresh) {
+        refreshInterval = setInterval(async () => {
+            const data = await firebaseDB.getImpostorDashboardData();
+            handleDataUpdate(data);
+        }, 5000); // Update every 5 seconds
+    }
+}
+
+function refreshAllData() {
+    if (refreshInterval) clearInterval(refreshInterval);
+    startAutoRefresh();
+}
+
+function updateCooldowns() {
+    updateKillCooldown();
+}
+
+function logout() {
+    if (currentImpostor) {
+        firebaseDB.updatePlayerStatus(currentImpostor.id, 'offline');
+    }
+    localStorage.removeItem('currentPlayer');
+    window.location.href = 'Title screen.html';
+}
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', initializeImpostorPanel);
+
+// Cleanup when leaving
+window.addEventListener('beforeunload', () => {
+    if (unsubscribe) unsubscribe();
+    if (refreshInterval) clearInterval(refreshInterval);
+    if (currentImpostor) {
+        firebaseDB.updatePlayerStatus(currentImpostor.id, 'offline');
+    }
+});
+  </script>
+</body>
+</html>
