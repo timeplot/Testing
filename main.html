@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Network Security Log - Among Us Cyber</title>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database.js"></script>
+<script src="firebase-config.js"></script>
+<script src="firebase-game-db.js"></script>
+
+<style>
+  * {box-sizing: border-box;margin:0;padding:0;}
+  body {font-family: monospace;color: chartreuse;background-color: black;padding: 20px;line-height:1.6;}
+  .container {max-width: 1400px;margin:0 auto;background-color:black;border-radius:8px;overflow:hidden;}
+  header {background: linear-gradient(to right,darkgreen, chartreuse);color:white;padding:24px 30px;border-bottom:1px solid black;}
+  h1 {font-size:26px;margin-bottom:8px;display:flex;align-items:center;}
+  h1 i {margin-right:12px;font-size:28px;}
+  .subtitle {font-size:15px;opacity:0.85;margin-bottom:12px;}
+  .summary {display:flex;gap:20px;margin-top:15px;flex-wrap:wrap;}
+  .summary-item {background-color:black;padding:6px 14px;border-radius:16px;font-size:13px;}
+  .training-controls {padding:20px 30px;background-color:black;border-bottom:1px solid #e1e8ed;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:15px;}
+  .timer-container {display:flex;align-items:center;gap:10px;font-weight:600;font-size:18px;}
+  .timer {background-color:green;color:white;padding:8px 16px;border-radius:20px;min-width:100px;text-align:center;}
+  .progress-container {flex-grow:1;max-width:300px;}
+  .progress-bar {height:20px;background-color:lightgreen;border-radius:10px;overflow:hidden;}
+  .progress {height:100%;background: linear-gradient(90deg, #28a745, #20c997);width:0%;transition: width 0.5s ease;border-radius:10px;}
+  .progress-text {text-align:center;font-size:14px;margin-top:5px;font-weight:600;}
+  .task-instructions {background-color:black;padding:15px 30px;border-bottom:1px solid black;}
+  .instructions {font-size:16px;color:green;}
+  .instructions strong {color:red;}
+  .table-container {overflow-x:auto;max-height:60vh;overflow-y:auto;}
+  table {width:100%;border-collapse:collapse;}
+  thead {position:sticky;top:0;z-index:10;}
+  th {background-color:greenyellow;color:black;padding:16px 12px;text-align:left;font-weight:600;border-right:1px solid rgba(255,255,255,0.1);}
+  th:last-child {border-right:none;}
+  tbody tr {border-bottom:1px solid #e9ecef;transition:background-color 0.2s;cursor:pointer;}
+  tbody tr:hover {background-color:#f8f9fa;}
+  tbody tr.selected {background-color:#fff3cd;}
+  tbody tr.correct {background-color:#d4edda;}
+  tbody tr.incorrect {background-color:#f8d7da;}
+  td {padding:14px 12px;vertical-align:top;border-right:1px solid #e9ecef;}
+  td:last-child {border-right:none;}
+  .id-cell {font-weight:600;color:#495057;text-align:center;width:50px;}
+  .timestamp-cell {width:140px;font-family:monospace;font-size:13px;}
+  .host-cell {width:100px;font-weight:500;}
+  .service-cell {width:130px;}
+  .action-cell {width:120px;font-weight:600;}
+  .source-cell, .dest-cell {width:140px;font-family:monospace;font-size:13px;}
+  .protocol-cell {width:70px;text-align:center;}
+  .port-cell {width:70px;text-align:center;font-family:monospace;}
+  .details-cell {min-width:200px;}
+  .actions {padding:20px 30px;background:chartreuse;border-top:1px solid #e1e8ed;display:flex;justify-content:center;gap:15px;}
+  button {padding:12px 24px;border:none;border-radius:6px;cursor:pointer;font-weight:600;transition:all 0.3s ease;font-size:16px;}
+  #submitBtn {background-color:green;color:white;}
+  #submitBtn:disabled {background-color:green;cursor:not-allowed;color:black;}
+  #resetBtn {background-color:black;color:green;}
+  .footer {padding:18px 30px;background: linear-gradient(to right,darkgreen, chartreuse);border-top:1px solid green;text-align:center;color:black;font-size:14px;}
+  .results {padding:20px 30px;text-align:center;display:none;}
+  .results h2 {margin-bottom:15px;color:#155724;}
+  .score {font-size:24px;font-weight:bold;margin:20px 0;color:#0f5132;}
+  .sabotage-warning {color: red; font-weight: bold; text-align: center; padding: 10px; background-color: rgba(255, 0, 0, 0.1); margin-top: 10px; display: none;}
+  
+  /* Attempts System */
+  .attempts-display {
+    background: rgba(255, 193, 7, 0.2);
+    border: 2px solid #ffc107;
+    border-radius: 10px;
+    padding: 15px;
+    margin: 15px 0;
+    text-align: center;
+  }
+  .attempts-count {
+    font-size: 1.2em;
+    font-weight: bold;
+    color: #ffc107;
+  }
+  .attempt-warning {
+    color: #ff6b6b;
+    font-weight: bold;
+    margin-top: 10px;
+  }
+  
+  /* Meeting Button */
+  .meeting-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 15px 25px;
+    background: #ff4444;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    z-index: 1000;
+    box-shadow: 0 4px 15px rgba(255, 68, 68, 0.3);
+  }
+  .meeting-btn:hover {
+    background: #ff6b6b;
+    transform: translateY(-2px);
+  }
+  .meeting-btn:disabled {
+    background: #666;
+    cursor: not-allowed;
+    transform: none;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<header>
+<h1><i>🔍</i> Network Security Log</h1>
+<div class="subtitle">Identify suspicious network activity in the log below</div>
+<div class="summary">
+<div class="summary-item">Total Events: <strong>67</strong></div>
+<div class="summary-item">Time Range: <strong>00:15:03 - 02:50:47</strong></div>
+<div class="summary-item">Suspicious Items: <strong>5</strong></div>
+<div class="summary-item">Your Score: <strong id="playerScore">0</strong></div>
+</div>
+</header>
+
+<!-- Attempts Display -->
+<div class="attempts-display">
+  <div class="instructions">
+    <strong>Training Task:</strong> There are <strong>5 suspicious activities</strong> hidden in this network log. Select the suspicious entries by clicking on them. You have <strong>5 minutes</strong> to complete this task.
+    <br><strong>Attempts Remaining: <span id="attemptsCount" class="attempts-count">3</span>/3</strong>
+  </div>
+</div>
+
+<div class="training-controls">
+<div class="timer-container">
+<span>Time Remaining:</span>
+<div class="timer" id="timer">05:00</div>
+</div>
+<div class="progress-container">
+<div class="progress-bar">
+<div class="progress" id="progress"></div>
+</div>
+<div class="progress-text" id="progressText">Progress: 0%</div>
+</div>
+</div>
+
+<div class="task-instructions">
+<div class="sabotage-warning" id="sabotageWarning">⚠️ WARNING: The log has been sabotaged! Entries have been shuffled!</div>
+</div>
+
+<div class="table-container">
+<table id="logTable">
+<thead>
+<tr>
+<th>ID</th>
+<th>Timestamp</th>
+<th>Host</th>
+<th>Service</th>
+<th>Action</th>
+<th>Source IP</th>
+<th>Dest IP</th>
+<th>Protocol</th>
+<th>Src Port</th>
+<th>Dest Port</th>
+<th>Details</th>
+</tr>
+</thead>
+<tbody id="logTableBody"></tbody>
+</table>
+</div>
+
+<div class="actions">
+<button id="submitBtn" disabled>Submit Answers</button>
+<button id="resetBtn">Reset Selection</button>
+</div>
+
+<div class="results" id="results">
+<h2>Task Results</h2>
+<div class="score" id="scoreDisplay">Your Score: 0/5</div>
+<div id="resultDetails"></div>
+</div>
+
+<div class="footer">Network Security Log Analysis Training</div>
+</div>
+
+<!-- Meeting Button -->
+<button class="meeting-btn" id="meetingBtn" onclick="goToMeeting()">🚨 Emergency Meeting</button>
+
+<script>
+// Game variables
+let currentPlayer = null;
+let selectedEntries = [];
+let timeLeft = 5 * 60;
+let timerInterval;
+let progress = 0;
+let gameCompleted = false;
+let sabotaged = false;
+let remainingAttempts = 3;
+let currentAttempt = 0;
+let unsubscribe;
+
+// Suspicious entries (IDs that are actually suspicious)
+const suspiciousEntries = [19, 21, 22, 26, 47];
+
+// Log data
+let logData = [
+  { id: 1, timestamp: "Oct 09 00:15:03", host: "websrv01", service: "kernel", action: "ACCEPT", source: "192.168.1.42", dest: "192.168.1.10", protocol: "TCP", srcPort: "53214", destPort: "443", details: "" },
+  { id: 2, timestamp: "Oct 09 00:17:22", host: "fw01", service: "kernel", action: "ACCEPT", source: "192.168.1.10", dest: "8.8.8.8", protocol: "UDP", srcPort: "51723", destPort: "53", details: "" },
+  { id: 3, timestamp: "Oct 09 00:18:15", host: "dbsrv02", service: "sshd", action: "Accepted password", source: "192.168.1.50", dest: "", protocol: "SSH", srcPort: "51512", destPort: "22", details: "for admin" },
+  { id: 4, timestamp: "Oct 09 00:19:41", host: "app01", service: "systemd", action: "Started", source: "", dest: "", protocol: "", srcPort: "", destPort: "", details: "nginx service" },
+  { id: 5, timestamp: "Oct 09 00:20:09", host: "websrv02", service: "httpd", action: "GET", source: "192.168.1.50", dest: "", protocol: "HTTP", srcPort: "", destPort: "80", details: "/index.html 200 1423" },
+  { id: 6, timestamp: "Oct 09 00:21:55", host: "fw01", service: "kernel", action: "ACCEPT", source: "192.168.1.33", dest: "93.184.216.34", protocol: "TCP", srcPort: "54021", destPort: "80", details: "" },
+  { id: 7, timestamp: "Oct 09 00:25:16", host: "mail01", service: "postfix/smtpd", action: "connect", source: "192.168.1.15", dest: "", protocol: "SMTP", srcPort: "", destPort: "25", details: "" },
+  { id: 8, timestamp: "Oct 09 00:28:12", host: "mail01", service: "postfix/smtpd", action: "disconnect", source: "192.168.1.15", dest: "", protocol: "SMTP", srcPort: "", destPort: "25", details: "ehlo=1 mail=1 rcpt=1" },
+  { id: 9, timestamp: "Oct 09 00:30:42", host: "fw01", service: "kernel", action: "ACCEPT", source: "192.168.1.60", dest: "172.217.10.14", protocol: "TCP", srcPort: "50344", destPort: "443", details: "" },
+  { id: 10, timestamp: "Oct 09 00:33:09", host: "websrv01", service: "httpd", action: "GET", source: "192.168.1.45", dest: "", protocol: "HTTP", srcPort: "", destPort: "80", details: "/api/v1/status 200 312" },
+  { id: 11, timestamp: "Oct 09 00:35:02", host: "dbsrv01", service: "CRON", action: "CMD", source: "", dest: "", protocol: "", srcPort: "", destPort: "", details: "/usr/local/bin/backup.sh" },
+  { id: 12, timestamp: "Oct 09 00:36:48", host: "fw01", service: "kernel", action: "ACCEPT", source: "192.168.1.41", dest: "192.168.1.10", protocol: "TCP", srcPort: "53311", destPort: "22", details: "" },
+  { id: 13, timestamp: "Oct 09 00:37:11", host: "fw01", service: "kernel", action: "DROP", source: "203.0.113.21", dest: "192.168.1.10", protocol: "TCP", srcPort: "54321", destPort: "22", details: "" },
+  { id: 14, timestamp: "Oct 09 00:39:09", host: "app01", service: "nginx", action: "GET", source: "", dest: "", protocol: "HTTP", srcPort: "", destPort: "80", details: "/login 200 1056" },
+  { id: 15, timestamp: "Oct 09 01:02:11", host: "fw01", service: "kernel", action: "DROP", source: "45.83.212.99", dest: "192.168.1.10", protocol: "TCP", srcPort: "50412", destPort: "22", details: "multiple attempts" },
+  { id: 16, timestamp: "Oct 09 01:04:43", host: "websrv02", service: "sshd", action: "Failed password", source: "45.83.212.99", dest: "", protocol: "SSH", srcPort: "50412", destPort: "22", details: "for invalid user test" },
+  { id: 17, timestamp: "Oct 09 01:05:01", host: "websrv02", service: "sshd", action: "Failed password", source: "45.83.212.99", dest: "", protocol: "SSH", srcPort: "50413", destPort: "22", details: "for invalid user admin" },
+  { id: 18, timestamp: "Oct 09 01:05:44", host: "websrv02", service: "sshd", action: "Failed password", source: "45.83.212.99", dest: "", protocol: "SSH", srcPort: "50414", destPort: "22", details: "for invalid user root" },
+  { id: 19, timestamp: "Oct 09 01:06:09", host: "websrv02", service: "sshd", action: "Accepted password", source: "45.83.212.99", dest: "Unkown", protocol: "SSH", srcPort: "50415", destPort: "22", details: "for admin" },
+  { id: 20, timestamp: "Oct 09 01:07:42", host: "fw01", service: "kernel", action: "ACCEPT", source: "192.168.1.10", dest: "198.51.100.44", protocol: "TCP", srcPort: "49831", destPort: "8080", details: "unusual outbound" },
+  { id: 21, timestamp: "Oct 09 01:09:12", host: "app01", service: "systemd", action: "Unexpected process", source: "", dest: "Unkown", protocol: "", srcPort: "", destPort: "", details: "/tmp/.hidden/runme.sh" },
+  { id: 22, timestamp: "Oct 09 01:09:33", host: "fw01", service: "kernel", action: "ACCEPT", source: "192.168.1.10", dest: "Unkown", protocol: "TCP", srcPort: "49832", destPort: "8080", details: "data exfil pattern" },
+  { id: 23, timestamp: "Oct 09 01:10:41", host: "dbsrv02", service: "systemd", action: "Created user", source: "", dest: "", protocol: "", srcPort: "", destPort: "", details: "backup1" },
+  { id: 24, timestamp: "Oct 09 01:12:56", host: "fw01", service: "kernel", action: "DROP", source: "203.0.113.44", dest: "192.168.1.10", protocol: "TCP", srcPort: "50522", destPort: "3389", details: "" },
+  { id: 25, timestamp: "Oct 09 01:15:32", host: "websrv02", service: "httpd", action: "POST", source: "192.168.1.10", dest: "", protocol: "HTTP", srcPort: "", destPort: "80", details: "/upload.php 500 0" },
+  { id: 26, timestamp: "Oct 09 01:16:04", host: "fw01", service: "kernel", action: "ACCEPT", source: "192.168.1.10", dest: "Unkown", protocol: "TCP", srcPort: "49833", destPort: "8080", details: "persistence beacon" },
+  { id: 27, timestamp: "Oct 09 01:17:49", host: "app01", service: "CRON", action: "CMD", source: "", dest: "", protocol: "", srcPort: "", destPort: "", details: "/tmp/.hidden/runme.sh" },
+  { id: 28, timestamp: "Oct 09 01:20:10", host: "fw01", service: "kernel", action: "ACCEPT", source: "192.168.1.45", dest: "192.168.1.10", protocol: "TCP", srcPort: "54111", destPort: "443", details: "" },
+  { id: 29, timestamp: "Oct 09 01:23:39", host: "dbsrv01", service: "systemd", action: "Finished", source: "", dest: "", protocol: "", srcPort: "", destPort: "", details: "hourly data sync" },
+  { id: 30, timestamp: "Oct 09 01:26:11", host: "websrv01", service: "httpd", action: "GET", source: "", dest: "", protocol: "HTTP", srcPort: "", destPort: "80", details: "/api/v1/health 200 421" },
+  { id: 31, timestamp: "Oct 09 01:29:52", host: "app01", service: "systemd", action: "Completed", source: "", dest: "", protocol: "", srcPort: "", destPort: "", details: "scheduled cleanup" },
+  { id: 32, timestamp: "Oct 09 01:31:10", host: "fw01", service: "kernel", action: "ACCEPT", source: "192.168.1.12", dest: "172.217.10.14", protocol: "TCP", srcPort: "50513", destPort: "443", details: "" },
+  { id: 33, timestamp: "Oct 09 01:34:20", host: "fw01", service: "kernel", action: "DROP", source: "10.0.0.250", dest: "192.168.1.10", protocol: "ICMP", srcPort: "", destPort: "", details: "TYPE=8 CODE=0" },
+  { id: 34, timestamp: "Oct 09 01:36:51", host: "websrv02", service: "httpd", action: "GET", source: "", dest: "", protocol: "HTTP", srcPort: "", destPort: "80", details: "/reports 200 2031" },
+  { id: 35, timestamp: "Oct 09 01:40:13", host: "mail01", service: "postfix/smtpd", action: "connect", source: "192.168.1.15", dest: "", protocol: "SMTP", srcPort: "", destPort: "25", details: "" },
+  { id: 36, timestamp: "Oct 09 01:42:59", host: "mail01", service: "postfix/smtpd", action: "disconnect", source: "192.168.1.15", dest: "", protocol: "SMTP", srcPort: "", destPort: "25", details: "" },
+  { id: 37, timestamp: "Oct 09 01:45:33", host: "fw01", service: "kernel", action: "ACCEPT", source: "192.168.1.45", dest: "172.217.14.110", protocol: "TCP", srcPort: "50222", destPort: "443", details: "" },
+  { id: 38, timestamp: "Oct 09 02:00:01", host: "websrv02", service: "httpd", action: "GET", source: "192.168.1.50", dest: "", protocol: "HTTP", srcPort: "", destPort: "80", details: "/home.html 200 1582" },
+  { id: 39, timestamp: "Oct 09 02:01:22", host: "fw01", service: "kernel", action: "ACCEPT", source: "192.168.1.20", dest: "192.168.1.10", protocol: "TCP", srcPort: "52022", destPort: "443", details: "" },
+  { id: 40, timestamp: "Oct 09 02:03:41", host: "dbsrv02", service: "systemd", action: "Started", source: "", dest: "", protocol: "", srcPort: "", destPort: "", details: "nightly backup" },
+  { id: 41, timestamp: "Oct 09 02:05:12", host: "app01", service: "nginx", action: "GET", source: "", dest: "", protocol: "HTTP", srcPort: "", destPort: "80", details: "/dashboard 200 1203" },
+  { id: 42, timestamp: "Oct 09 02:07:44", host: "websrv01", service: "httpd", action: "GET", source: "192.168.1.55", dest: "", protocol: "HTTP", srcPort: "", destPort: "80", details: "/api/v2/status 200 342" },
+  { id: 43, timestamp: "Oct 09 02:09:55", host: "fw01", service: "kernel", action: "DROP", source: "203.0.113.21", dest: "192.168.1.10", protocol: "TCP", srcPort: "54322", destPort: "22", details: "" },
+  { id: 44, timestamp: "Oct 09 02:11:22", host: "app01", service: "CRON", action: "CMD", source: "", dest: "", protocol: "", srcPort: "", destPort: "", details: "/usr/local/bin/cleanup.sh" },
+  { id: 45, timestamp: "Oct 09 02:13:33", host: "websrv02", service: "sshd", action: "Failed password", source: "203.0.113.21", dest: "", protocol: "SSH", srcPort: "50422", destPort: "22", details: "for invalid user guest" },
+  { id: 46, timestamp: "Oct 09 02:15:11", host: "dbsrv01", service: "systemd", action: "Created", source: "", dest: "", protocol: "", srcPort: "", destPort: "", details: "temporary log archive" },
+  { id: 47, timestamp: "Oct 09 02:16:47", host: "fw01", service: "kernel", action: "ACCEPT", source: "192.168.1.10", dest: "Unkown", protocol: "TCP", srcPort: "49834", destPort: "8080", details: "unusual outbound" },
+  { id: 48, timestamp: "Oct 09 02:18:21", host: "app01", service: "systemd", action: "Unexpected process", source: "", dest: "", protocol: "", srcPort: "", destPort: "", details: "/tmp/.hidden/script.sh" },
+  { id: 49, timestamp: "Oct 09 02:20:44", host: "mail01", service: "postfix/smtpd", action: "connect", source: "192.168.1.16", dest: "", protocol: "SMTP", srcPort: "", destPort: "25", details: "" },
+  { id: 50, timestamp: "Oct 09 02:22:59", host: "websrv02", service: "httpd", action: "GET", source: "", dest: "", protocol: "HTTP", srcPort: "", destPort: "80", details: "/login 200 1043" },
+  { id: 51, timestamp: "Oct 09 02:24:12", host: "fw01", service: "kernel", action: "DROP", source: "203.0.113.44", dest: "192.168.1.10", protocol: "TCP", srcPort: "50523", destPort: "3389", details: "" },
+  { id: 52, timestamp: "Oct 09 02:26:30", host: "dbsrv02", service: "sshd", action: "Accepted password", source: "192.168.1.50", dest: "", protocol: "SSH", srcPort: "51520", destPort: "22", details: "for admin" },
+  { id: 53, timestamp: "Oct 09 02:28:11", host: "app01", service: "nginx", action: "POST", source: "", dest: "", protocol: "HTTP", srcPort: "", destPort: "80", details: "/upload.php 500 0" },
+  { id: 54, timestamp: "Oct 09 02:29:59", host: "websrv01", service: "httpd", action: "GET", source: "192.168.1.45", dest: "", protocol: "HTTP", srcPort: "", destPort: "80", details: "/api/v1/stats 200 218" },
+  { id: 55, timestamp: "Oct 09 02:31:40", host: "fw01", service: "kernel", action: "ACCEPT", source: "192.168.1.10", dest: "198.51.100.44", protocol: "TCP", srcPort: "49835", destPort: "8080", details: "persistence beacon" },
+  { id: 56, timestamp: "Oct 09 02:33:11", host: "app01", service: "CRON", action: "CMD", source: "", dest: "", protocol: "", srcPort: "", destPort: "", details: "/tmp/.hidden/runme.sh" },
+  { id: 57, timestamp: "Oct 09 02:34:52", host: "websrv02", service: "httpd", action: "GET", source: "", dest: "", protocol: "HTTP", srcPort: "", destPort: "80", details: "/reports 200 2041" },
+  { id: 58, timestamp: "Oct 09 02:36:31", host: "mail01", service: "postfix/smtpd", action: "disconnect", source: "192.168.1.16", dest: "", protocol: "SMTP", srcPort: "", destPort: "25", details: "" },
+  { id: 59, timestamp: "Oct 09 02:38:10", host: "fw01", service: "kernel", action: "ACCEPT", source: "192.168.1.45", dest: "172.217.14.111", protocol: "TCP", srcPort: "50223", destPort: "443", details: "" },
+  { id: 60, timestamp: "Oct 09 02:40:55", host: "dbsrv01", service: "systemd", action: "Completed", source: "", dest: "", protocol: "", srcPort: "", destPort: "", details: "hourly data sync" },
+  { id: 61, timestamp: "Oct 09 02:42:31", host: "websrv01", service: "httpd", action: "GET", source: "", dest: "", protocol: "HTTP", srcPort: "", destPort: "80", details: "/api/v2/health 200 422" },
+  { id: 62, timestamp: "Oct 09 02:44:17", host: "fw01", service: "kernel", action: "DROP", source: "10.0.0.251", dest: "192.168.1.10", protocol: "ICMP", srcPort: "", destPort: "", details: "TYPE=8 CODE=0" },
+  { id: 63, timestamp: "Oct 09 02:45:33", host: "app01", service: "systemd", action: "Completed", source: "", dest: "", protocol: "", srcPort: "", destPort: "", details: "scheduled maintenance" },
+  { id: 64, timestamp: "Oct 09 02:46:12", host: "mail01", service: "postfix/smtpd", action: "connect", source: "192.168.1.17", dest: "", protocol: "SMTP", srcPort: "", destPort: "25", details: "" },
+  { id: 65, timestamp: "Oct 09 02:47:59", host: "websrv02", service: "httpd", action: "GET", source: "", dest: "", protocol: "HTTP", srcPort: "", destPort: "80", details: "/dashboard 200 1211" },
+  { id: 66, timestamp: "Oct 09 02:49:30", host: "fw01", service: "kernel", action: "ACCEPT", source: "192.168.1.46", dest: "172.217.14.112", protocol: "TCP", srcPort: "50224", destPort: "443", details: "" },
+  { id: 67, timestamp: "Oct 09 02:50:47", host: "dbsrv02", service: "systemd", action: "Finished", source: "", dest: "", protocol: "", srcPort: "", destPort: "", details: "temporary backup" }
+];
+
+// DOM elements
+const logTableBody = document.getElementById('logTableBody');
+const timerElement = document.getElementById('timer');
+const progressElement = document.getElementById('progress');
+const progressText = document.getElementById('progressText');
+const submitBtn = document.getElementById('submitBtn');
+const resetBtn = document.getElementById('resetBtn');
+const resultsElement = document.getElementById('results');
+const scoreDisplay = document.getElementById('scoreDisplay');
+const resultDetails = document.getElementById('resultDetails');
+const sabotageWarning = document.getElementById('sabotageWarning');
+const attemptsCount = document.getElementById('attemptsCount');
+const meetingBtn = document.getElementById('meetingBtn');
+const playerScore = document.getElementById('playerScore');
+
+// Initialize game
+async function initializeGame() {
+    currentPlayer = JSON.parse(localStorage.getItem('currentPlayer'));
+    
+    if (!currentPlayer) {
+        window.location.href = 'Title screen.html';
+        return;
+    }
+
+    // Check if player is eliminated
+    if (currentPlayer.status === 'eliminated') {
+        alert('💀 You have been eliminated!');
+        window.location.href = 'Title screen.html';
+        return;
+    }
+
+    // Update player score display
+    playerScore.textContent = currentPlayer.score;
+
+    // Load attempts from Firebase
+    const attempts = await firebaseDB.getPlayerAttempts(currentPlayer.id, 'network-security');
+    remainingAttempts = 3 - attempts.count;
+    currentAttempt = attempts.count;
+    
+    if (attempts.completed) {
+        // Already completed this task
+        window.location.href = 'meeting-room-1.5.html';
+        return;
+    }
+
+    attemptsCount.textContent = remainingAttempts;
+    
+    if (remainingAttempts <= 0) {
+        disableGame();
+        showNoAttemptsMessage();
+        return;
+    }
+
+    initializeTable();
+    updateProgress();
+    startTimer();
+    updateMeetingButton();
+
+    // Set up real-time sabotage detection
+    unsubscribe = firebaseDB.onDataChange((data) => {
+        if (data.sabotages?.active && !sabotaged) {
+            handleSabotage();
+        }
+        // Update meeting button status
+        updateMeetingButton();
+        
+        // Check if player was eliminated
+        if (data.players && data.players[currentPlayer.id]?.status === 'eliminated') {
+            alert('💀 You have been eliminated!');
+            window.location.href = 'Title screen.html';
+        }
+    });
+}
+
+function initializeTable() {
+    logTableBody.innerHTML = '';
+    logData.forEach(entry => {
+        const row = document.createElement('tr');
+        row.dataset.id = entry.id;
+        row.innerHTML = `
+            <td class="id-cell">${entry.id}</td>
+            <td class="timestamp-cell">${entry.timestamp}</td>
+            <td class="host-cell">${entry.host}</td>
+            <td class="service-cell">${entry.service}</td>
+            <td class="action-cell">${entry.action}</td>
+            <td class="source-cell">${entry.source}</td>
+            <td class="dest-cell">${entry.dest}</td>
+            <td class="protocol-cell">${entry.protocol}</td>
+            <td class="port-cell">${entry.srcPort}</td>
+            <td class="port-cell">${entry.destPort}</td>
+            <td class="details-cell">${entry.details}</td>
+        `;
+        row.addEventListener('click', () => toggleSelection(entry.id, row));
+        logTableBody.appendChild(row);
+    });
+}
+
+function toggleSelection(id, row) {
+    if (gameCompleted || remainingAttempts <= 0) return;
+    
+    const index = selectedEntries.indexOf(id);
+    if (index === -1) {
+        selectedEntries.push(id);
+        row.classList.add('selected');
+    } else {
+        selectedEntries.splice(index, 1);
+        row.classList.remove('selected');
+    }
+    submitBtn.disabled = selectedEntries.length === 0;
+}
+
+function updateProgress() {
+    progressElement.style.width = `${progress}%`;
+    progressText.textContent = `Progress: ${progress}%`;
+}
+
+function startTimer() {
+    timerInterval = setInterval(() => {
+        timeLeft--;
+        const minutes = Math.floor(timeLeft / 60);
+        const seconds = timeLeft % 60;
+        timerElement.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        
+        if (timeLeft <= 0) {
+            clearInterval(timerInterval);
+            submitAnswers();
+        }
+    }, 1000);
+}
+
+async function submitAnswers() {
+    if (gameCompleted || remainingAttempts <= 0) return;
+    
+    // Record attempt in Firebase
+    await firebaseDB.incrementAttempts(currentPlayer.id, 'network-security');
+    currentAttempt++;
+    remainingAttempts = 3 - currentAttempt;
+    attemptsCount.textContent = remainingAttempts;
+    
+    clearInterval(timerInterval);
+    gameCompleted = true;
+    
+    let correct = selectedEntries.filter(id => suspiciousEntries.includes(id)).length;
+    progress = correct * 20;
+    updateProgress();
+    scoreDisplay.textContent = `Your Score: ${correct}/5`;
+    
+    if (correct === 5) {
+        // Task completed successfully
+        await firebaseDB.markChallengeCompleted(currentPlayer.id, 'network-security');
+        await firebaseDB.updatePlayerTask(currentPlayer.id, 1, true);
+        
+        resultDetails.innerHTML = `
+            <p style="color:#155724;font-weight:bold;">✅ Excellent! You found all suspicious activities!</p>
+            <p>+50 points! Moving to next task...</p>
+        `;
+        resultsElement.style.display = 'block';
+        
+        setTimeout(() => {
+            window.location.href = 'meeting-room-1.5.html';
+        }, 3000);
+    } else {
+        if (remainingAttempts > 0) {
+            resultDetails.innerHTML = `
+                <p style="color:#721c24;">You found ${correct}/5 suspicious activities.</p>
+                <p style="color:#856404;">Attempts remaining: ${remainingAttempts}</p>
+                <button onclick="resetForRetry()" 
+                        style="padding:8px 16px; background:#ffc107; color:#000; border:none; border-radius:4px; cursor:pointer; margin-top:10px;">
+                    Try Again
+                </button>
+            `;
+        } else {
+            resultDetails.innerHTML = `
+                <p style="color:#721c24;">You found ${correct}/5 suspicious activities.</p>
+                <p style="color:#dc3545;">No attempts remaining. You've become vulnerable to elimination!</p>
+                <button onclick="goToMeeting()" 
+                        style="padding:8px 16px; background:#dc3545; color:white; border:none; border-radius:4px; cursor:pointer; margin-top:10px;">
+                    Call Emergency Meeting
+                </button>
+            `;
+            disableGame();
+        }
+        resultsElement.style.display = 'block';
+    }
+    
+    // Highlight correct/incorrect answers
+    document.querySelectorAll('tr').forEach(row => {
+        const id = parseInt(row.dataset.id);
+        if (suspiciousEntries.includes(id)) {
+            row.classList.add('correct');
+        }
+        if (selectedEntries.includes(id) && !suspiciousEntries.includes(id)) {
+            row.classList.add('incorrect');
+        }
+    });
+}
+
+function resetForRetry() {
+    selectedEntries = [];
+    submitBtn.disabled = true;
+    document.querySelectorAll('tr').forEach(row => row.classList.remove('selected', 'correct', 'incorrect'));
+    resultsElement.style.display = 'none';
+    gameCompleted = false;
+    
+    // Reset timer if needed
+    if (timeLeft <= 0) {
+        timeLeft = 180;
+        startTimer();
+    }
+}
+
+function disableGame() {
+    document.querySelectorAll('tr').forEach(row => row.style.pointerEvents = 'none');
+    submitBtn.disabled = true;
+    resetBtn.disabled = true;
+}
+
+function showNoAttemptsMessage() {
+    resultsElement.innerHTML = `
+        <div style="color:#ff6b6b; text-align:center;">
+            <h3>❌ No Attempts Remaining</h3>
+            <p>You've used all 3 attempts on this challenge.</p>
+            <p>You are now vulnerable to elimination by impostors!</p>
+            <button onclick="goToMeeting()" 
+                    style="padding:10px 20px; background:#ff6b6b; color:white; border:none; border-radius:5px; cursor:pointer; margin-top:15px;">
+                Call Emergency Meeting
+            </button>
+        </div>
+    `;
+    resultsElement.style.display = 'block';
+    disableGame();
+}
+
+function handleSabotage() {
+    sabotaged = true;
+    sabotageWarning.style.display = 'block';
+    
+    // Shuffle the table
+    shuffleTable();
+    
+    // Reset selection
+    selectedEntries = [];
+    submitBtn.disabled = true;
+    
+    // Log sabotage activity
+    firebaseDB.logActivity('Network Security log was sabotaged by impostor!', 'sabotage');
+}
+
+function shuffleTable() {
+    const nonSuspicious = logData.filter(d => !suspiciousEntries.includes(d.id));
+    for (let i = nonSuspicious.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [nonSuspicious[i], nonSuspicious[j]] = [nonSuspicious[j], nonSuspicious[i]];
+    }
+    
+    const shuffledData = [];
+    let nsIndex = 0;
+    for (let i = 0; i < logData.length; i++) {
+        if (suspiciousEntries.includes(logData[i].id)) {
+            shuffledData.push(logData[i]);
+        } else {
+            shuffledData.push(nonSuspicious[nsIndex]);
+            nsIndex++;
+        }
+    }
+    
+    logData = shuffledData;
+    initializeTable();
+}
+
+async function goToMeeting() {
+    window.location.href = 'meeting-chat.html';
+}
+
+async function updateMeetingButton() {
+    const canCall = await firebaseDB.canCallMeeting(currentPlayer.id);
+    meetingBtn.disabled = !canCall.canCall;
+    meetingBtn.title = canCall.reason;
+}
+
+// Event listeners
+submitBtn.addEventListener('click', submitAnswers);
+resetBtn.addEventListener('click', resetForRetry);
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', initializeGame);
+
+// Cleanup when leaving
+window.addEventListener('beforeunload', () => {
+    if (unsubscribe) unsubscribe();
+    if (currentPlayer && !gameCompleted) {
+        firebaseDB.updatePlayerStatus(currentPlayer.id, 'offline');
+    }
+});
+</script>
+</body>
+</html>
