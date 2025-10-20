@@ -1,4 +1,10 @@
-// firebase-game-db.js - COMPLETE GAME DATABASE SYSTEM
+// firebase-game-db.js - COMPLETE GAME DATABASE SYSTEM FOR among-ussy
+
+// Check Firebase availability
+if (typeof firebase === 'undefined') {
+    console.error('Firebase not loaded! Check script order.');
+    throw new Error('Firebase SDK not loaded');
+}
 
 const GameConfig = {
     TOTAL_PLAYERS: 8,
@@ -54,8 +60,8 @@ async function registerPlayer(username, password) {
     const playerData = {
         id: playerId,
         username: username,
-        password: password, // Note: In production, hash this!
-        role: 'crewmate', // Default role
+        password: password,
+        role: 'crewmate',
         score: 0,
         status: 'online',
         currentTask: 0,
@@ -138,6 +144,7 @@ async function assignRoles() {
 
 // Game State Management
 async function initializeGameState() {
+    const players = await getPlayers();
     const gameState = {
         currentRound: 1,
         killsThisRound: 0,
@@ -148,7 +155,7 @@ async function initializeGameState() {
         voteInProgress: false,
         rolesAssigned: true,
         gameStartTime: getCurrentTimestamp(),
-        totalPlayers: Object.keys(await getPlayers()).length
+        totalPlayers: Object.keys(players).length
     };
     
     await firebase.database().ref('gameState').set(gameState);
@@ -572,5 +579,9 @@ window.firebaseDB = {
     // Utilities
     onDataChange,
     logActivity,
-    getRecentActivities
+    getRecentActivities,
+    getData,
+    updateData
 };
+
+console.log('Firebase Game DB loaded successfully for among-ussy!');
