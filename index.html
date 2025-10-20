@@ -5,10 +5,14 @@
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <title>AMONG US CYBER — Login</title>
     
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database.js"></script>
+    <!-- FIREBASE SDK MUST BE FIRST -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
+    
+    <!-- THEN YOUR CONFIG -->
     <script src="firebase-config.js"></script>
+    
+    <!-- THEN YOUR GAME DB -->
     <script src="firebase-game-db.js"></script>
     
     <style>
@@ -144,7 +148,6 @@
             Or create new account with any username/password
         </p>
     </div>
-
     <script>
         // Falling binary effect
         (function makeDigits(){
@@ -162,24 +165,50 @@
                 document.body.appendChild(span);
             }
         })();
-
+    
         // Demo user auto-fill
         function fillDemo(username, password) {
             document.getElementById('Username').value = username;
             document.getElementById('Password').value = password;
         }
-
+    
+        // Test Firebase connection
+        function testFirebase() {
+            console.log('Testing Firebase connection for among-ussy...');
+            console.log('Firebase defined:', typeof firebase !== 'undefined');
+            if (typeof firebase !== 'undefined') {
+                console.log('Firebase apps:', firebase.apps.length);
+                console.log('Firebase DB:', typeof firebase.database !== 'undefined');
+                console.log('firebaseDB:', typeof firebaseDB !== 'undefined');
+                
+                // Test database connection
+                if (typeof firebase.database !== 'undefined') {
+                    firebase.database().ref('test').set({timestamp: Date.now()})
+                        .then(() => console.log('✅ Firebase write successful!'))
+                        .catch(err => console.error('❌ Firebase error:', err));
+                }
+            }
+        }
+    
         // Enhanced login system with Firebase
         document.getElementById('Among').addEventListener('submit', async function(e){
             e.preventDefault();
             const username = document.getElementById('Username').value.trim();
             const password = document.getElementById('Password').value;
             const msg = document.getElementById('msg');
-
+    
+            // Test Firebase first
+            testFirebase();
+    
             msg.textContent = 'Connecting to server...';
             msg.style.color = 'chartreuse';
-
+    
             try {
+                // Check if Firebase is available
+                if (typeof firebase === 'undefined' || typeof firebaseDB === 'undefined') {
+                    throw new Error('Firebase not loaded. Please refresh the page.');
+                }
+    
                 let player;
                 
                 // Try to authenticate with Firebase
@@ -193,7 +222,7 @@
                     player = await firebaseDB.registerPlayer(username, password);
                     msg.textContent = `Welcome, ${player.username}! Role: ${player.role}`;
                 }
-
+    
                 // Store current player locally
                 localStorage.setItem('currentPlayer', JSON.stringify(player));
                 
@@ -220,11 +249,12 @@
                 }
                 
             } catch (error) {
-                msg.textContent = error.message;
+                console.error('Login error:', error);
+                msg.textContent = 'Error: ' + error.message;
                 msg.style.color = '#ff6b6b';
             }
         });
-
+    
         function redirectPlayer(player) {
             document.body.innerHTML = `
                 <div style="text-align: center; padding: 50px; color: chartreuse;">
@@ -257,22 +287,29 @@
                 }
             }, 3000);
         }
-
+    
         // Check if player was eliminated
         async function checkEliminationStatus() {
             const currentPlayer = JSON.parse(localStorage.getItem('currentPlayer'));
-            if (currentPlayer) {
-                const data = await firebaseDB.getData();
-                const playerInDB = data.players[currentPlayer.id];
-                if (playerInDB && playerInDB.status === 'eliminated') {
-                    localStorage.removeItem('currentPlayer');
-                    alert('💀 You have been eliminated! Please login again.');
+            if (currentPlayer && typeof firebaseDB !== 'undefined') {
+                try {
+                    const data = await firebaseDB.getData();
+                    const playerInDB = data.players[currentPlayer.id];
+                    if (playerInDB && playerInDB.status === 'eliminated') {
+                        localStorage.removeItem('currentPlayer');
+                        alert('💀 You have been eliminated! Please login again.');
+                    }
+                } catch (error) {
+                    console.log('Could not check elimination status:', error);
                 }
             }
         }
-
+    
         // Initialize on load
         document.addEventListener('DOMContentLoaded', async function() {
+            console.log('Page loaded, testing Firebase for among-ussy...');
+            testFirebase();
+            
             await checkEliminationStatus();
             
             // Auto-fill if remembered
@@ -283,7 +320,7 @@
                 document.getElementById('Password').value = pass;
             }
         });
-
+    
         // Enter key to submit
         document.getElementById('Password').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
