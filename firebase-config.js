@@ -1,4 +1,4 @@
-// firebase-config.js - FOR YOUR among-ussy PROJECT
+// firebase-config.js - VERCEL COMPATIBLE
 const firebaseConfig = {
   apiKey: "AIzaSyBDFrTtHCun1AcmSgw53MINjI5INw7HmNs",
   authDomain: "among-ussy.firebaseapp.com",
@@ -10,79 +10,55 @@ const firebaseConfig = {
   measurementId: "G-5GK3JHG9T7"
 };
 
-// Initialize Firebase for compatibility SDK
-if (typeof firebase !== 'undefined') {
-    if (!firebase.apps.length) {
-        try {
-            firebase.initializeApp(firebaseConfig);
-            console.log('✅ Firebase initialized successfully for among-ussy!');
-            console.log('📊 Database URL:', firebaseConfig.databaseURL);
-            console.log('🎯 Project ID:', firebaseConfig.projectId);
-            
-            // Test connection immediately
-            firebase.database().ref('.info/connected').on('value', (snap) => {
-                if (snap.val() === true) {
-                    console.log('✅ Firebase Realtime Database connected!');
-                } else {
-                    console.log('❌ Firebase Realtime Database disconnected');
-                }
-            });
-            
-        } catch (error) {
-            console.error('❌ Firebase initialization error:', error);
+// Initialize when Firebase is available
+function initializeFirebase() {
+    if (typeof firebase !== 'undefined') {
+        if (!firebase.apps.length) {
+            try {
+                firebase.initializeApp(firebaseConfig);
+                console.log('✅ Firebase initialized on Vercel!');
+                console.log('📊 Database URL:', firebaseConfig.databaseURL);
+                
+                // Test connection
+                firebase.database().ref('.info/connected').on('value', (snap) => {
+                    if (snap.val() === true) {
+                        console.log('✅ Firebase Realtime Database connected!');
+                    }
+                });
+            } catch (error) {
+                console.error('❌ Firebase initialization error:', error);
+            }
+        } else {
+            console.log('🔄 Using existing Firebase app');
         }
     } else {
-        console.log('🔄 Using existing Firebase app');
-        firebase.app(); // Use existing app
+        console.log('⏳ Waiting for Firebase SDK...');
+        setTimeout(initializeFirebase, 100);
     }
-} else {
-    console.error('❌ Firebase SDK not loaded - check script order in HTML');
 }
 
-// Enhanced connection testing function
+// Start initialization when in browser
+if (typeof window !== 'undefined') {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeFirebase);
+    } else {
+        initializeFirebase();
+    }
+}
+
+// Global test function
 window.testFirebaseConnection = async function() {
+    if (typeof firebase === 'undefined') {
+        return { success: false, error: 'Firebase not loaded' };
+    }
+    
     try {
-        console.log('🧪 Testing Firebase connection...');
-        
-        // Test write operation
         await firebase.database().ref('connectionTest').set({
             timestamp: Date.now(),
-            message: 'Connection test successful',
-            project: 'among-ussy'
+            message: 'Vercel test successful'
         });
-        console.log('✅ Write test passed');
-        
-        // Test read operation
-        const snapshot = await firebase.database().ref('connectionTest').once('value');
-        const data = snapshot.val();
-        console.log('✅ Read test passed:', data);
-        
-        // Test players path access
-        const playersSnapshot = await firebase.database().ref('players').once('value');
-        console.log('✅ Players path access:', playersSnapshot.exists() ? 'Exists' : 'Empty');
-        
-        return { success: true, data: data };
-        
+        return { success: true, message: 'Firebase working on Vercel!' };
     } catch (error) {
-        console.error('❌ Firebase connection test failed:', error);
         return { success: false, error: error.message };
     }
 };
-
-// Auto-test on load if in browser context
-if (typeof window !== 'undefined') {
-    document.addEventListener('DOMContentLoaded', function() {
-        setTimeout(() => {
-            if (typeof firebase !== 'undefined' && firebase.apps.length > 0) {
-                console.log('🚀 Auto-testing Firebase connection...');
-                window.testFirebaseConnection().then(result => {
-                    if (result.success) {
-                        console.log('🎉 Firebase is fully operational!');
-                    } else {
-                        console.error('💥 Firebase configuration issue detected');
-                    }
-                });
-            }
-        }, 1000);
-    });
-}
