@@ -5,14 +5,10 @@
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <title>AMONG US CYBER — Login</title>
     
-    <!-- FIREBASE SDK MUST BE FIRST -->
+    <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
-    
-    <!-- THEN YOUR CONFIG -->
     <script src="firebase-config.js"></script>
-    
-    <!-- THEN YOUR GAME DB -->
     <script src="firebase-game-db.js"></script>
     
     <style>
@@ -72,31 +68,6 @@
 
         h1 { margin-top: 18px; }
         #msg { color:#ff6b6b; font-size: medium; margin-top:12px; }
-        .demo-users { 
-            margin-top: 20px; 
-            font-size: medium; 
-            color: #8fbfcf;
-            text-align: left;
-            max-width: 500px;
-            margin: 20px auto;
-            padding: 15px;
-            background: rgba(0, 255, 0, 0.1);
-            border-radius: 10px;
-            border: 1px solid darkgreen;
-        }
-        .demo-users h3 { 
-            color: chartreuse; 
-            text-align: center;
-            margin-bottom: 10px;
-        }
-        .user-list { 
-            display: grid; 
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            font-size: small;
-        }
-        .impostor { color: #ff6b6b; }
-        .crewmate { color: #6bc4ff; }
         
         .game-info {
             background: rgba(0, 100, 0, 0.2);
@@ -132,22 +103,6 @@
         <p><strong>Max Kills:</strong> 3 per round • <strong>Players:</strong> 8 total</p>
     </div>
 
-    <div class="demo-users">
-        <h3>🎮 Demo Users (Click to auto-fill)</h3>
-        <div class="user-list">
-            <div class="impostor" onclick="fillDemo('Red', 'red123')">🕵️ Red (Impostor)</div>
-            <div class="crewmate" onclick="fillDemo('Blue', 'blue123')">👨‍🚀 Blue (Crewmate)</div>
-            <div class="impostor" onclick="fillDemo('Orange', 'orange123')">🕵️ Orange (Impostor)</div>
-            <div class="crewmate" onclick="fillDemo('Green', 'green123')">👨‍🚀 Green (Crewmate)</div>
-            <div class="crewmate" onclick="fillDemo('Yellow', 'yellow123')">👨‍🚀 Yellow (Crewmate)</div>
-            <div class="crewmate" onclick="fillDemo('Purple', 'purple123')">👨‍🚀 Purple (Crewmate)</div>
-            <div class="crewmate" onclick="fillDemo('Pink', 'pink123')">👨‍🚀 Pink (Crewmate)</div>
-            <div class="crewmate" onclick="fillDemo('White', 'white123')">👨‍🚀 White (Crewmate)</div>
-        </div>
-        <p style="text-align: center; margin-top: 10px; font-size: smaller;">
-            Or create new account with any username/password
-        </p>
-    </div>
     <script>
         // Falling binary effect
         (function makeDigits(){
@@ -165,12 +120,6 @@
                 document.body.appendChild(span);
             }
         })();
-    
-        // Demo user auto-fill
-        function fillDemo(username, password) {
-            document.getElementById('Username').value = username;
-            document.getElementById('Password').value = password;
-        }
     
         // Test Firebase connection
         function testFirebase() {
@@ -196,19 +145,19 @@
             const username = document.getElementById('Username').value.trim();
             const password = document.getElementById('Password').value;
             const msg = document.getElementById('msg');
-    
+
             // Test Firebase first
             testFirebase();
-    
+
             msg.textContent = 'Connecting to server...';
             msg.style.color = 'chartreuse';
-    
+
             try {
                 // Check if Firebase is available
                 if (typeof firebase === 'undefined' || typeof firebaseDB === 'undefined') {
                     throw new Error('Firebase not loaded. Please refresh the page.');
                 }
-    
+
                 let player;
                 
                 // Try to authenticate with Firebase
@@ -222,7 +171,7 @@
                     player = await firebaseDB.registerPlayer(username, password);
                     msg.textContent = `Welcome, ${player.username}! Role: ${player.role}`;
                 }
-    
+
                 // Store current player locally
                 localStorage.setItem('currentPlayer', JSON.stringify(player));
                 
@@ -254,7 +203,7 @@
                 msg.style.color = '#ff6b6b';
             }
         });
-    
+
         function redirectPlayer(player) {
             document.body.innerHTML = `
                 <div style="text-align: center; padding: 50px; color: chartreuse;">
@@ -287,7 +236,7 @@
                 }
             }, 3000);
         }
-    
+
         // Check if player was eliminated
         async function checkEliminationStatus() {
             const currentPlayer = JSON.parse(localStorage.getItem('currentPlayer'));
@@ -304,7 +253,7 @@
                 }
             }
         }
-    
+
         // Initialize on load
         document.addEventListener('DOMContentLoaded', async function() {
             console.log('Page loaded, testing Firebase for among-ussy...');
@@ -320,7 +269,7 @@
                 document.getElementById('Password').value = pass;
             }
         });
-    
+
         // Enter key to submit
         document.getElementById('Password').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
